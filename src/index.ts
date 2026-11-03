@@ -15,7 +15,10 @@
  * @module dsh-fullstack-team
  */
 
+import { existsSync, statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import z from '@deepseek-ai/schemastery'
 import { discoverSkills, parseSkill, rebaseResourcePaths, type SkillCandidate } from './catalog'
@@ -34,6 +37,15 @@ export const Config = z.object({
   exclude: z.array(z.string().min(1)).default([]),
   /** Register `devflow_gate` and `devflow_state`. */
   tools: z.boolean().default(true),
+  /** Skill packs this role depends on, provisioned separately. */
+  packs: z.array(
+    z.object({
+      name: z.string().min(1),
+      dir: z.string().min(1),
+      include: z.array(z.string().min(1)),
+      exclude: z.array(z.string().min(1)),
+    }),
+  ),
 })
 
 /** Configuration as resolved by Cordis. */
@@ -42,6 +54,25 @@ export interface DevflowConfig {
   include?: string[]
   exclude?: string[]
   tools?: boolean
+  packs?: PackConfig[]
+}
+
+/**
+ * A skill pack a role depends on.
+ *
+ * The pack is not shipped with the bundle: a role declares it, the user
+ * provisions it, and a missing pack is a startup error rather than a role that
+ * quietly runs without the capability it was hired for.
+ */
+export interface PackConfig {
+  /** Pack name, used in diagnostics. */
+  name: string
+  /** Directory holding the pack's `SKILL.md` directories. `~` is expanded. */
+  dir: string
+  /** Optional allowlist scoped to this pack. */
+  include?: string[]
+  /** Optional denylist scoped to this pack. */
+  exclude?: string[]
 }
 
 /** The slice of the skill registry this plugin uses. */
@@ -78,6 +109,41 @@ function shippedSkillDir(): string {
 }
 
 /**
+ * Resolve a configured directory to an absolute path.
+ *
+ * @param dir - Absolute path, `~`-relative path, or path relative to the cwd.
+ * @returns The absolute path.
+ */
+export function expandDir(dir: string): string {
+  if (dir === '~') return homedir()
+  if (dir.startsWith('~/')) return resolve(homedir(), dir.slice(2))
+  return resolve(dir)
+}
+
+/**
+ * Collect the skills a pack contributes.
+ *
+ * @param pack - Pack declaration from the preset.
+ * @param provider - Provider name to advertise under.
+ * @returns The pack's candidates.
+ * @throws When the pack is not provisioned, or is not a directory.
+ */
+function packSkills(pack: PackConfig, provider: string): SkillCandidate[] {
+  const directory = expandDir(pack.dir)
+  if (!existsSync(directory) || !statSync(directory).isDirectory()) {
+    throw new Error(
+      `dsh-fullstack-team: skill pack "${pack.name}" is not installed — expected a directory at ${directory}. ` +
+        'Install the pack, or drop this role.',
+    )
+  }
+  return discoverSkills(directory, {
+    provider,
+    include: pack.include ?? [],
+    exclude: pack.exclude ?? [],
+  })
+}
+
+/**
  * Register the bundle's skills and tools.
  *
  * @param ctx - Context carrying the skill and tool registries.
@@ -94,9 +160,27 @@ export function apply(ctx: DevflowContext, config: DevflowConfig = {}): void {
     include: config.include ?? [],
     exclude: config.exclude ?? [],
   })
+
+  // A role's packs are additive: the bundle's own skills stay available, and a
+  // name collision is an error rather than a silent override, because two
+  // different copies of one skill is exactly the ambiguity this flow removes.
+  const claimed = new Set(candidates.map((candidate) => candidate.name))
+  for (const pack of config.packs ?? []) {
+    for (const candidate of packSkills(pack, providerName)) {
+      if (claimed.has(candidate.name)) {
+        throw new Error(
+          `dsh-fullstack-team: skill "${candidate.name}" from pack "${pack.name}" collides with a skill already advertised`,
+        )
+      }
+      claimed.add(candidate.name)
+      candidates.push(candidate)
+    }
+  }
+
   if (candidates.length === 0) {
     throw new Error(`dsh-fullstack-team: no skills to advertise under ${skillDir}`)
   }
+  candidates.sort((left, right) => left.name.localeCompare(right.name))
 
   const provider: SkillProviderLike = {
     name: providerName,

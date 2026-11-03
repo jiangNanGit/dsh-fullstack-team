@@ -6,7 +6,7 @@ export default defineConfig({
   format: 'esm',
   platform: 'node',
   target: 'es2024',
-  dts: true,
+  dts: false,
   fixedExtension: false,
   clean: true,
   deps: { neverBundle: [/^@deepseek-ai\//, 'yaml'] },

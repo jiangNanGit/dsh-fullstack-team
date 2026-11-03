@@ -65,6 +65,8 @@ See [`docs/003-tools.md`](docs/003-tools.md) for the finding codes, failure budg
 
 A role is a preset whose `dsh-fullstack-team` entry carries an `include` allowlist, so the role only ever sees its own kit. [`examples/role-preset.patch.yml`](examples/role-preset.patch.yml) is a complete copyable preset; [`docs/002-role-presets.md`](docs/002-role-presets.md) has the suggested kits per role.
 
+A role can also **depend on a skill pack** that is provisioned separately — the Flutter engineer loads the Flutter pack, and nobody else does. A declared pack that is not installed is a startup error, not a role that quietly runs without the capability it was hired for. See [`examples/role-preset-flutter.patch.yml`](examples/role-preset-flutter.patch.yml) and [`docs/004-skill-packs.md`](docs/004-skill-packs.md).
+
 ## Design
 
 - [`docs/001-design.md`](docs/001-design.md) — the mechanism design: two failure classes (compliance loss vs capability ceiling), the state machine with rework edges, the five gate contracts, role set, environment/permission matrix, and the production authorization token.
