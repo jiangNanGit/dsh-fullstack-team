@@ -101,6 +101,33 @@ export function parseSkill(raw: string, path: string): ParsedSkill {
   }
 }
 
+/** Directory prefixes skills use when they cite their own bundled resources. */
+const OWN_RESOURCE_PREFIXES = ['.agent/skills/', '.dsh/skills/', '.claude/skills/'] as const
+
+/**
+ * Rewrite a skill's references to its own bundled resources.
+ *
+ * A skill written for one product cites its scripts by that product's layout —
+ * `.agent/skills/impeccable/scripts/impeccable`. Once the skill ships inside a
+ * bundle, that path does not exist in the user's project, and the model would
+ * try to run a file that is not there. The bundle knows where the file really
+ * is, so it rebases the citation to the installed location at load time and the
+ * source `SKILL.md` stays untouched.
+ *
+ * @param content - Markdown body of the skill.
+ * @param skillName - Skill whose resources are being cited.
+ * @param skillRoot - Directory holding every shipped skill.
+ * @returns The body with citations pointed at the installed copy.
+ */
+export function rebaseResourcePaths(content: string, skillName: string, skillRoot: string): string {
+  const target = `${skillRoot.replace(/[\\/]+$/u, '')}/${skillName}/`
+  let result = content
+  for (const prefix of OWN_RESOURCE_PREFIXES) {
+    result = result.replaceAll(`${prefix}${skillName}/`, target)
+  }
+  return result
+}
+
 /**
  * Discover every skill directory under `skillDir`.
  *

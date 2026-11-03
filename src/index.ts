@@ -18,7 +18,7 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import z from '@deepseek-ai/schemastery'
-import { discoverSkills, parseSkill, type SkillCandidate } from './catalog'
+import { discoverSkills, parseSkill, rebaseResourcePaths, type SkillCandidate } from './catalog'
 import { flowTools } from './tools'
 
 /** Cordis plugin identity. */
@@ -104,7 +104,7 @@ export function apply(ctx: DevflowContext, config: DevflowConfig = {}): void {
     async get(candidate, options) {
       const { rank: _rank, locator, ...summary } = candidate
       const skill = parseSkill(await readFile(locator, { encoding: 'utf8', signal: options.signal }), locator)
-      return { ...summary, content: skill.content }
+      return { ...summary, content: rebaseResourcePaths(skill.content, candidate.name, skillDir) }
     },
   }
 

@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { discoverSkills, parseSkill } from '../src/catalog'
+import { discoverSkills, parseSkill, rebaseResourcePaths } from '../src/catalog'
 import { apply, type DevflowConfig, type DevflowContext, type SkillProviderLike } from '../src/index'
 
 const shipped = fileURLToPath(new URL('../skills/', import.meta.url))
@@ -162,5 +162,36 @@ describe('plugin', () => {
     const provider = register({ include: ['dev-orchestrator', 'requirement-clarify'] })
     const listed = await provider.list()
     expect(listed.map((candidate) => candidate.name)).toEqual(['dev-orchestrator', 'requirement-clarify'])
+  })
+})
+
+describe('rebaseResourcePaths', () => {
+  it('points a citation at the installed copy', () => {
+    expect(rebaseResourcePaths('run `.agent/skills/impeccable/scripts/impeccable`', 'impeccable', '/opt/bundle/skills/')).toBe(
+      'run `/opt/bundle/skills/impeccable/scripts/impeccable`',
+    )
+  })
+
+  it('tolerates a root without a trailing separator', () => {
+    expect(rebaseResourcePaths('.dsh/skills/x/a.js', 'x', '/opt/bundle/skills')).toBe('/opt/bundle/skills/x/a.js')
+  })
+
+  it('leaves another skill’s resources alone', () => {
+    const text = '`.agent/skills/taste/assets/base.css`'
+    expect(rebaseResourcePaths(text, 'impeccable', '/opt/bundle/skills/')).toBe(text)
+  })
+
+  it('leaves ordinary prose alone', () => {
+    const text = 'See the scripts directory.'
+    expect(rebaseResourcePaths(text, 'impeccable', '/opt/bundle/skills/')).toBe(text)
+  })
+
+  it('fixes the citations the shipped impeccable skill actually carries', () => {
+    const raw = readFileSync(join(shipped, 'impeccable', 'SKILL.md'), 'utf8')
+    const body = parseSkill(raw, join(shipped, 'impeccable', 'SKILL.md')).content
+    const rebased = rebaseResourcePaths(body, 'impeccable', shipped)
+    expect(body).toContain('.agent/skills/impeccable/')
+    expect(rebased).not.toContain('.agent/skills/')
+    expect(rebased).toContain(join(shipped, 'impeccable', 'scripts', 'impeccable'))
   })
 })
