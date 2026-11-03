@@ -25,6 +25,7 @@
     "skills",
     "cordis.patch.yml",
     "docs",
+    "examples",
     "README.md",
     "LICENSE"
   ],
@@ -38,7 +39,8 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "prepack": "pnpm build"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
@@ -51,11 +53,13 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.0.5",
     "@deepseek-ai/dsh-skill": "^0.2.1-rc.5",
-    "@deepseek-ai/schemastery": "3.18.5"
+    "@deepseek-ai/schemastery": "3.18.5",
+    "@deepseek-ai/dsh-tools": "^0.2.1-rc.5"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.5",
     "@deepseek-ai/dsh-skill": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.5",
     "@deepseek-ai/schemastery": "3.18.5",
     "@types/node": "24.10.1",
     "tsdown": "0.22.14",

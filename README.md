@@ -47,6 +47,19 @@ Restart the app (or the CLI profile) after installing; bundle layers load at pro
 
 Every skill is advertised at the bundled rank (600), so a project-level or user-level skill with the same name still wins.
 
+## Two tools
+
+The bundle also registers the flow's observation point:
+
+- **`devflow_gate`** — reads the artifacts of one stage and returns typed findings: missing files, surviving `TODO`s, empty sections, endpoints that the design and the contract disagree on, functional points with no test case, acceptance gaps, review evidence that does not resolve. It never writes and never decides.
+- **`devflow_state`** — the durable state at `<requirement>/.dsh/devflow/state.json`: current stage, rework counters, history. `advance` re-runs the current stage's gate and refuses to move while it fails.
+
+See [`docs/003-tools.md`](docs/003-tools.md) for the finding codes, failure budgets, and the `devflow.config.json` keys.
+
+## Roles
+
+A role is a preset whose `dsh-devflow` entry carries an `include` allowlist, so the role only ever sees its own kit. [`examples/role-preset.patch.yml`](examples/role-preset.patch.yml) is a complete copyable preset; [`docs/002-role-presets.md`](docs/002-role-presets.md) has the suggested kits per role.
+
 ## Design
 
 - [`docs/001-design.md`](docs/001-design.md) — the mechanism design: two failure classes (compliance loss vs capability ceiling), the state machine with rework edges, the five gate contracts, role set, environment/permission matrix, and the production authorization token.

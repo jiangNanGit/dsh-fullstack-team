@@ -137,6 +137,7 @@ describe('plugin', () => {
           captured = factory()
         },
       },
+      tools: { register: () => undefined },
     }
     apply(ctx, config)
     if (captured === undefined) throw new Error('plugin registered no provider')
