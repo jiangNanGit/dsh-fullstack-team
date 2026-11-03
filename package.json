@@ -15,6 +15,15 @@
     "wish-driven"
   ],
   "license": "MIT",
+  "author": "jiangnan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jiangNanGit/dsh-fullstack-team.git"
+  },
+  "homepage": "https://github.com/jiangNanGit/dsh-fullstack-team#readme",
+  "bugs": {
+    "url": "https://github.com/jiangNanGit/dsh-fullstack-team/issues"
+  },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
