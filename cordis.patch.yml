@@ -1,0 +1,9 @@
+# dsh-devflow bundle layer: inserts the skill provider.
+#
+# The plugin reads the skills shipped inside this package, so a profile needs no
+# skill-directory configuration. A role preset can narrow what it sees by
+# inserting the same entry with `include`, which is how hard-bound roles are
+# expressed without shipping a second copy of the skills.
+- insert:
+    - id: dsh-devflow
+      name: dsh-devflow
