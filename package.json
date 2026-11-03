@@ -1,13 +1,18 @@
 {
-  "name": "dsh-devflow",
+  "name": "dsh-fullstack-team",
   "version": "0.1.0",
-  "description": "Multi-agent development flow for DSH: clarify → design → build → accept → ship, shipped as Agent Skills with role presets and code-gated artifacts.",
+  "description": "A full-stack delivery team for DeepSeek Harness — wish-driven development from requirement to launch, with role presets, stage gates, and rework budgets that survive context loss.",
   "keywords": [
     "dsh",
-    "deepseek-harness",
     "dsh-bundle",
+    "deepseek-harness",
+    "agent-team",
+    "fullstack",
+    "delivery",
+    "workflow",
     "agent-skills",
-    "workflow"
+    "stage-gates",
+    "wish-driven"
   ],
   "license": "MIT",
   "type": "module",
@@ -35,6 +40,10 @@
     },
     "manifestVersion": 1
   },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": "^0.2.1-rc.5"
+  },
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
@@ -42,11 +51,6 @@
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "prepack": "pnpm build"
   },
-  "engines": {
-    "node": "^22.19.0 || >=24.0.0",
-    "dsh": "^0.2.1-rc.5"
-  },
-  "packageManager": "pnpm@11.28.5",
   "dependencies": {
     "yaml": "^2.8.1"
   },
@@ -66,5 +70,6 @@
     "typescript": "5.9.3",
     "unrun": "^0.3.1",
     "vitest": "4.1.8"
-  }
+  },
+  "packageManager": "pnpm@11.28.5"
 }

@@ -6,7 +6,7 @@
  * to move?". Both are deterministic: they read files and a state file, and they
  * return findings. Neither decides what to do about a failure.
  *
- * @module dsh-devflow/tools
+ * @module dsh-fullstack-team/tools
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'

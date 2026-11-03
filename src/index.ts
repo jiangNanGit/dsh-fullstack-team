@@ -1,5 +1,5 @@
 /**
- * `dsh-devflow` bundle plugin.
+ * `dsh-fullstack-team` bundle plugin.
  *
  * Contributes three things to a profile:
  *
@@ -12,7 +12,7 @@
  * 3. nothing else. Role composition stays in a preset, which narrows this
  *    plugin with `include` when a role must only see part of the flow.
  *
- * @module dsh-devflow
+ * @module dsh-fullstack-team
  */
 
 import { readFile } from 'node:fs/promises'
@@ -29,7 +29,7 @@ export const inject = ['skills', 'tools']
 
 /** Validated plugin configuration. */
 export const Config = z.object({
-  providerName: z.string().min(1).default('dsh-devflow'),
+  providerName: z.string().min(1).default('dsh-fullstack-team'),
   include: z.array(z.string().min(1)).default([]),
   exclude: z.array(z.string().min(1)).default([]),
   /** Register `devflow_gate` and `devflow_state`. */
@@ -86,7 +86,7 @@ function shippedSkillDir(): string {
  *   installation rather than an empty profile.
  */
 export function apply(ctx: DevflowContext, config: DevflowConfig = {}): void {
-  const providerName = config.providerName ?? 'dsh-devflow'
+  const providerName = config.providerName ?? 'dsh-fullstack-team'
   const skillDir = shippedSkillDir()
 
   const candidates = discoverSkills(skillDir, {
@@ -95,7 +95,7 @@ export function apply(ctx: DevflowContext, config: DevflowConfig = {}): void {
     exclude: config.exclude ?? [],
   })
   if (candidates.length === 0) {
-    throw new Error(`dsh-devflow: no skills to advertise under ${skillDir}`)
+    throw new Error(`dsh-fullstack-team: no skills to advertise under ${skillDir}`)
   }
 
   const provider: SkillProviderLike = {

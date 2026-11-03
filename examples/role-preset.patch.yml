@@ -1,4 +1,4 @@
-# Role preset example for dsh-devflow: the standard preset with the flow plugin
+# Role preset example for dsh-fullstack-team: the standard preset with the flow plugin
 # hard-bound to one role. Copy this file, change `id`, `name`, and `include`.
 #
 - insert:
@@ -6,7 +6,7 @@
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: devflow-backend
-        name: dsh-devflow 后端开发
+        name: dsh-fullstack-team 后端开发
         description: 按冻结契约实现后端代码；只看见流程入口、澄清闸、验收闸与运维手册。
         order: 1
         plugins:
@@ -130,10 +130,10 @@
             disabled: true
           # The only line that makes this a devflow role: the flow plugin with an
           # allowlist. A role sees exactly these skills and nothing else.
-          - id: dsh-devflow
-            name: dsh-devflow
+          - id: dsh-fullstack-team
+            name: dsh-fullstack-team
             config:
-              providerName: dsh-devflow-backend
+              providerName: dsh-fullstack-team-backend
               include:
                 - dev-orchestrator
                 - requirement-clarify

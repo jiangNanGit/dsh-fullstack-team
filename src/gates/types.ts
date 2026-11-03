@@ -7,7 +7,7 @@
  * writes — adjudication stays with the main agent, which reads the findings and
  * decides where to send the work back.
  *
- * @module dsh-devflow/gates/types
+ * @module dsh-fullstack-team/gates/types
  */
 
 /** The flow stages, in order. */

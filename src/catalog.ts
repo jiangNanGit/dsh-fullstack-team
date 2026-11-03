@@ -1,5 +1,5 @@
 /**
- * Skill catalog for the `dsh-devflow` bundle.
+ * Skill catalog for the `dsh-fullstack-team` bundle.
  *
  * The bundle ships Agent Skills as plain `SKILL.md` directories under
  * `skills/`. This module discovers them, validates their YAML frontmatter, and
@@ -11,7 +11,7 @@
  * silently disappearing from the catalog, because a flow skill that cannot be
  * advertised is a defect the operator must see.
  *
- * @module dsh-devflow/catalog
+ * @module dsh-fullstack-team/catalog
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -73,21 +73,21 @@ export interface DiscoverOptions {
  */
 export function parseSkill(raw: string, path: string): ParsedSkill {
   const block = FRONTMATTER.exec(raw)
-  if (block?.[1] === undefined) throw new Error(`dsh-devflow: ${path} has no YAML frontmatter`)
+  if (block?.[1] === undefined) throw new Error(`dsh-fullstack-team: ${path} has no YAML frontmatter`)
 
   const parsed: unknown = parse(block[1])
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`dsh-devflow: ${path} frontmatter is not a mapping`)
+    throw new Error(`dsh-fullstack-team: ${path} frontmatter is not a mapping`)
   }
 
   const fields = parsed as Record<string, unknown>
   const skillName = fields['name']
   const description = fields['description']
   if (typeof skillName !== 'string' || !SKILL_NAME.test(skillName)) {
-    throw new Error(`dsh-devflow: ${path} needs a kebab-case "name"`)
+    throw new Error(`dsh-fullstack-team: ${path} needs a kebab-case "name"`)
   }
   if (typeof description !== 'string' || description.trim().length === 0) {
-    throw new Error(`dsh-devflow: ${path} needs a non-empty "description"`)
+    throw new Error(`dsh-fullstack-team: ${path} needs a non-empty "description"`)
   }
 
   const { name: _name, description: _description, ...rest } = fields
@@ -135,7 +135,7 @@ export function discoverSkills(skillDir: string, options: DiscoverOptions): Skil
     const skill = parseSkill(raw, locator)
     if (include.size > 0 && !include.has(skill.name)) continue
     if (exclude.has(skill.name)) continue
-    if (seen.has(skill.name)) throw new Error(`dsh-devflow: duplicate skill name "${skill.name}"`)
+    if (seen.has(skill.name)) throw new Error(`dsh-fullstack-team: duplicate skill name "${skill.name}"`)
     seen.add(skill.name)
 
     candidates.push({

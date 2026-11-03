@@ -1,6 +1,6 @@
 # Role presets — hard-binding skills to one role
 
-A role is a preset whose `dsh-devflow` entry carries an `include` allowlist. That is the whole mechanism: the preset's own skill registry only ever hears about the listed skills, so "did this agent load the right skill?" stops being a question — the others do not exist in its session.
+A role is a preset whose `dsh-fullstack-team` entry carries an `include` allowlist. That is the whole mechanism: the preset's own skill registry only ever hears about the listed skills, so "did this agent load the right skill?" stops being a question — the others do not exist in its session.
 
 ## The shape
 
@@ -10,13 +10,13 @@ A role is a preset whose `dsh-devflow` entry carries an `include` allowlist. Tha
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: devflow-backend
-        name: dsh-devflow 后端开发
+        name: dsh-fullstack-team 后端开发
         plugins:
           # …the standard tool stack…
-          - id: dsh-devflow
-            name: dsh-devflow
+          - id: dsh-fullstack-team
+            name: dsh-fullstack-team
             config:
-              providerName: dsh-devflow-backend
+              providerName: dsh-fullstack-team-backend
               include:
                 - dev-orchestrator
                 - requirement-clarify
@@ -28,7 +28,7 @@ A role is a preset whose `dsh-devflow` entry carries an `include` allowlist. Tha
 
 ## Why a preset, and not a profile
 
-A preset is instantiated per session: its plugins — including the skill registry — live in that preset's scope. So two presets in one profile can advertise different skill sets without fighting. A profile-level `dsh-devflow` entry is still useful as the default for sessions that pick `standard`.
+A preset is instantiated per session: its plugins — including the skill registry — live in that preset's scope. So two presets in one profile can advertise different skill sets without fighting. A profile-level `dsh-fullstack-team` entry is still useful as the default for sessions that pick `standard`.
 
 ## Suggested kits
 

@@ -6,7 +6,7 @@
  * artifacts cross-reference it. Project-specific structure arrives as
  * configuration, never as code.
  *
- * @module dsh-devflow/gates/artifact
+ * @module dsh-fullstack-team/gates/artifact
  */
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
@@ -60,9 +60,9 @@ export interface Artifact {
  */
 export function resolveRoot(root: string): string {
   const absolute = resolve(root)
-  if (!isAbsolute(absolute)) throw new Error(`dsh-devflow: gate root must be absolute: ${root}`)
-  if (!existsSync(absolute)) throw new Error(`dsh-devflow: gate root does not exist: ${absolute}`)
-  if (!statSync(absolute).isDirectory()) throw new Error(`dsh-devflow: gate root is not a directory: ${absolute}`)
+  if (!isAbsolute(absolute)) throw new Error(`dsh-fullstack-team: gate root must be absolute: ${root}`)
+  if (!existsSync(absolute)) throw new Error(`dsh-fullstack-team: gate root does not exist: ${absolute}`)
+  if (!statSync(absolute).isDirectory()) throw new Error(`dsh-fullstack-team: gate root is not a directory: ${absolute}`)
   return absolute
 }
 

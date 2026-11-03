@@ -29,7 +29,7 @@ afterEach(() => {
 
 /** Create a throwaway skills directory from `{ name: frontmatter }` entries. */
 function fixture(skills: Record<string, string>): string {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-devflow-'))
+  const root = mkdtempSync(join(tmpdir(), 'dsh-fullstack-team-'))
   temporary.push(root)
   for (const [directory, frontmatter] of Object.entries(skills)) {
     mkdirSync(join(root, directory), { recursive: true })
@@ -40,12 +40,12 @@ function fixture(skills: Record<string, string>): string {
 
 describe('shipped skills', () => {
   it('advertises exactly the expected catalog', () => {
-    const candidates = discoverSkills(shipped, { provider: 'dsh-devflow' })
+    const candidates = discoverSkills(shipped, { provider: 'dsh-fullstack-team' })
     expect(candidates.map((candidate) => candidate.name)).toEqual(EXPECTED)
   })
 
   it('gives every skill a description and a readable base directory', () => {
-    for (const candidate of discoverSkills(shipped, { provider: 'dsh-devflow' })) {
+    for (const candidate of discoverSkills(shipped, { provider: 'dsh-fullstack-team' })) {
       expect(candidate.description.trim().length).toBeGreaterThan(0)
       expect(candidate.resourceBase).toEqual({ kind: 'directory', path: candidate.resourceBase.path })
       expect(candidate.locator.endsWith('SKILL.md')).toBe(true)
@@ -55,7 +55,7 @@ describe('shipped skills', () => {
   })
 
   it('keeps extra frontmatter as metadata', () => {
-    const impeccable = discoverSkills(shipped, { provider: 'dsh-devflow' }).find(
+    const impeccable = discoverSkills(shipped, { provider: 'dsh-fullstack-team' }).find(
       (candidate) => candidate.name === 'impeccable',
     )
     expect(impeccable?.metadata?.['version']).toBeDefined()
@@ -100,7 +100,7 @@ describe('filters', () => {
   })
 
   it('ignores directories without a SKILL.md', () => {
-    const root = mkdtempSync(join(tmpdir(), 'dsh-devflow-'))
+    const root = mkdtempSync(join(tmpdir(), 'dsh-fullstack-team-'))
     temporary.push(root)
     mkdirSync(join(root, 'notes'), { recursive: true })
     writeFileSync(join(root, 'notes', 'README.md'), 'not a skill\n')
@@ -146,7 +146,7 @@ describe('plugin', () => {
 
   it('registers a provider that lists and loads the shipped skills', async () => {
     const provider = register()
-    expect(provider.name).toBe('dsh-devflow')
+    expect(provider.name).toBe('dsh-fullstack-team')
 
     const listed = await provider.list()
     expect(listed.map((candidate) => candidate.name)).toEqual(EXPECTED)

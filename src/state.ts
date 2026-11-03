@@ -10,7 +10,7 @@
  * whole point: a stage with a failing gate cannot be left, no matter what the
  * model believes about its own work.
  *
- * @module dsh-devflow/state
+ * @module dsh-fullstack-team/state
  */
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'

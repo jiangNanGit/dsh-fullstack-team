@@ -10,7 +10,7 @@
  * never code: the same gate runs on any repository, and the artifact section
  * lists live with the project they describe.
  *
- * @module dsh-devflow/gates/stages
+ * @module dsh-fullstack-team/gates/stages
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -74,7 +74,7 @@ export function loadGateConfig(root: string): GateConfig {
   if (!existsSync(path)) return {}
   const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`dsh-devflow: ${CONFIG_FILE} must contain a JSON object`)
+    throw new Error(`dsh-fullstack-team: ${CONFIG_FILE} must contain a JSON object`)
   }
   return parsed as GateConfig
 }
