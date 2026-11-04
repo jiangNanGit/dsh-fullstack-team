@@ -13,7 +13,7 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: You are a coding agent powered by the {{model}} model.
+              prefix: "You are a coding agent powered by the {{model}} model. 你是「全栈研发团队 · 后端设计」。输入契约：需求冻结档 + 现有代码结构。输出契约：design.md 与 api-contract.md。需要的能力不在你的装备清单内时，停下来上报，不要自行替代。"
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -151,7 +151,7 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: You are a coding agent powered by the {{model}} model.
+              prefix: "You are a coding agent powered by the {{model}} model. 你是「全栈研发团队 · 运维」。输入契约：发版单 / 告警 / 线上现象。输出契约：处置记录与只读排查结论。需要的能力不在你的装备清单内时，停下来上报，不要自行替代。"
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -291,7 +291,7 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: You are a coding agent powered by the {{model}} model.
+              prefix: "You are a coding agent powered by the {{model}} model. 你是「全栈研发团队 · 主 PM」。输入契约：需求原文 + 仓库现状 + 上一轮产物。输出契约：冻结档、任务书、裁决结论、验收结论。需要的能力不在你的装备清单内时，停下来上报，不要自行替代。"
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -440,7 +440,7 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: You are a coding agent powered by the {{model}} model.
+              prefix: "You are a coding agent powered by the {{model}} model. 你是「全栈研发团队 · 测试」。输入契约：冻结档 + 契约文档 + 可运行环境。输出契约：acceptance-report.md，每条结论带证据。需要的能力不在你的装备清单内时，停下来上报，不要自行替代。"
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -579,7 +579,7 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: You are a coding agent powered by the {{model}} model.
+              prefix: "You are a coding agent powered by the {{model}} model. 你是「全栈研发团队 · 后端开发（Java）」。输入契约：design.md + api-contract.md + 任务书。输出契约：可编译代码与自测结果。需要的能力不在你的装备清单内时，停下来上报，不要自行替代。"
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -719,7 +719,7 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: You are a coding agent powered by the {{model}} model.
+              prefix: "You are a coding agent powered by the {{model}} model. 你是「全栈研发团队 · 前端开发（Web）」。输入契约：design.md + 契约 + UI 规范。输出契约：实现代码与走查截图。需要的能力不在你的装备清单内时，停下来上报，不要自行替代。"
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:

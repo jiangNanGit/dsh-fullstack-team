@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { loadRoles, planRoles, renderRoleEntry, renderRolesPatch, type RoleManifest } from '../src/roles'
+import { loadRoles, planRoles, renderPrefix, renderRoleEntry, renderRolesPatch, type RoleManifest } from '../src/roles'
 
 const repository = fileURLToPath(new URL('../', import.meta.url))
 const temporary: string[] = []
@@ -105,6 +105,28 @@ describe('renderRoleEntry', () => {
     expect(entry).toContain('packs:')
     expect(entry).toContain('- name: flutter')
     expect(entry).toContain('dir: ~/.dsh/skill-packs/flutter')
+  })
+})
+
+describe('renderPrefix', () => {
+  it('keeps the model placeholder for the loader', () => {
+    expect(renderPrefix(role())).toContain('{{model}}')
+  })
+
+  it('carries the role’s input and output contract', () => {
+    const prefix = renderPrefix(role({ contract: { input: '冻结档', output: 'design.md' } }))
+    expect(prefix).toContain('输入契约：冻结档')
+    expect(prefix).toContain('输出契约：design.md')
+  })
+
+  it('tells the role to stop rather than substitute', () => {
+    const prefix = renderPrefix(role({ contract: { input: 'A', output: 'B' } }))
+    expect(prefix).toContain('停下来上报')
+  })
+
+  it('stays a valid YAML scalar', () => {
+    const prefix = renderPrefix(role({ contract: { input: 'a: b', output: 'c"d' } }))
+    expect(() => JSON.parse(prefix)).not.toThrow()
   })
 })
 

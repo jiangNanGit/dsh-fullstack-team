@@ -6,3 +6,6 @@ include:
   - dev-orchestrator
   - acceptance-guard
   - error-triage
+contract:
+  input: 冻结档 + 契约文档 + 可运行环境
+  output: acceptance-report.md，每条结论带证据

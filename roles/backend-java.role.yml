@@ -11,3 +11,6 @@ include:
   - requirement-clarify
   - acceptance-guard
   - ops-runbook
+contract:
+  input: design.md + api-contract.md + 任务书
+  output: 可编译代码与自测结果

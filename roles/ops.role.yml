@@ -7,3 +7,6 @@ include:
   - error-triage
   - yunxiao-projex-ops
   - acceptance-guard
+contract:
+  input: 发版单 / 告警 / 线上现象
+  output: 处置记录与只读排查结论

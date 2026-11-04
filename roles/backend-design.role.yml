@@ -5,3 +5,6 @@ kind: core
 include:
   - dev-orchestrator
   - requirement-clarify
+contract:
+  input: 需求冻结档 + 现有代码结构
+  output: design.md 与 api-contract.md

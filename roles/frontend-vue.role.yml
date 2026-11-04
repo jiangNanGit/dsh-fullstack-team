@@ -10,3 +10,6 @@ include:
   - impeccable
   - ui-theme-governance
   - acceptance-guard
+contract:
+  input: design.md + 契约 + UI 规范
+  output: 实现代码与走查截图

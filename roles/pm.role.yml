@@ -11,3 +11,6 @@ include:
   - yunxiao-projex-ops
   - ui-theme-governance
 delegates: true
+contract:
+  input: 需求原文 + 仓库现状 + 上一轮产物
+  output: 冻结档、任务书、裁决结论、验收结论

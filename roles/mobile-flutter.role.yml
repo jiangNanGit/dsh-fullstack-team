@@ -8,6 +8,9 @@ include:
   - dev-orchestrator
   - impeccable
   - ui-theme-governance
+contract:
+  input: design.md + 契约 + 设计稿
+  output: Flutter 实现与走查截图
 packs:
   - name: flutter
     dir: ~/.dsh/skill-packs/flutter

@@ -13,7 +13,7 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: You are a coding agent powered by the {{model}} model.
+              prefix: {{ROLE_PREFIX}}
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:

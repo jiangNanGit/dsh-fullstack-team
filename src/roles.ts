@@ -43,6 +43,8 @@ export interface RoleManifest {
   packs?: RolePack[]
   /** Whether this role may dispatch other roles. */
   delegates?: boolean
+  /** What this role takes in and hands back — the thin-agent contract. */
+  contract?: { input: string; output: string }
 }
 
 /** A role whose packs are all present. */
@@ -115,6 +117,27 @@ export function planRoles(roles: readonly RoleManifest[], exists: (dir: string) 
   return plan
 }
 
+/**
+ * Render a role's system prefix.
+ *
+ * The prefix carries only what the architecture says belongs to the agent —
+ * who it is, what it accepts, what it returns. Procedure and standards live in
+ * the skills, which is why this stays short.
+ *
+ * @param role - Role to render.
+ * @returns A YAML-safe quoted scalar.
+ */
+export function renderPrefix(role: RoleManifest): string {
+  const base = 'You are a coding agent powered by the {{model}} model.'
+  if (role.contract === undefined) return JSON.stringify(base)
+  const contract =
+    `你是「${role.name}」。` +
+    `输入契约：${role.contract.input}。` +
+    `输出契约：${role.contract.output}。` +
+    '需要的能力不在你的装备清单内时，停下来上报，不要自行替代。'
+  return JSON.stringify(`${base} ${contract}`)
+}
+
 /** Indentation of an entry inside a preset's plugin list. */
 const ENTRY_INDENT = ' '.repeat(10)
 
@@ -159,7 +182,14 @@ export function renderRoleEntry(role: RoleManifest): string {
  * @throws When the template is missing a token.
  */
 export function renderRolesPatch(template: string, plan: RolePlan): string {
-  for (const token of ['{{PRESET_ID}}', '{{ROLE_ID}}', '{{ROLE_NAME}}', '{{ROLE_DESCRIPTION}}', '{{ROLE_ENTRY}}']) {
+  for (const token of [
+    '{{PRESET_ID}}',
+    '{{ROLE_ID}}',
+    '{{ROLE_NAME}}',
+    '{{ROLE_DESCRIPTION}}',
+    '{{ROLE_PREFIX}}',
+    '{{ROLE_ENTRY}}',
+  ]) {
     if (!template.includes(token)) throw new Error(`dsh-fullstack-team: preset template is missing ${token}`)
   }
 
@@ -175,6 +205,7 @@ export function renderRolesPatch(template: string, plan: RolePlan): string {
       .replaceAll('{{ROLE_ID}}', role.id)
       .replaceAll('{{ROLE_NAME}}', role.name)
       .replaceAll('{{ROLE_DESCRIPTION}}', role.description)
+      .replaceAll('{{ROLE_PREFIX}}', renderPrefix(role))
       .replaceAll('{{ROLE_ENTRY}}', renderRoleEntry(role))
       .replace(/^        order: \d+$/mu, `        order: ${index + 1}`)
 

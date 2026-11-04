@@ -30,6 +30,42 @@ function expand(dir) {
   return resolve(dir)
 }
 
+/** Scaffold a new role manifest. */
+function scaffold(id, displayName) {
+  const path = join(root, 'roles', `${id}.role.yml`)
+  if (existsSync(path)) throw new Error(`role "${id}" already exists at ${path}`)
+  const manifest = `id: ${id}
+name: ${displayName}
+description: 一句话说明这个角色做什么、交出什么。
+kind: stack
+detect:
+  - 换成该项目根目录的标记文件
+include:
+  - dev-orchestrator
+  - acceptance-guard
+contract:
+  input: design.md + api-contract.md + 任务书
+  output: 可交付的产物与自测结果
+`
+  writeFileSync(path, manifest, 'utf8')
+  console.log(`created ${path}`)
+  console.log('\n下一步：')
+  console.log('  1. 填 detect / include / contract')
+  console.log('  2. node scripts/roles.mjs --write')
+  console.log('  3. 合入 profile 的 cordis.patch.yml 并重启')
+}
+
+if (process.argv[2] === 'new') {
+  const id = process.argv[3]
+  if (id === undefined) {
+    console.error('用法：node scripts/roles.mjs new <id> [--name 显示名]')
+    process.exit(1)
+  }
+  const nameIndex = process.argv.indexOf('--name')
+  scaffold(id, nameIndex === -1 ? id : (process.argv[nameIndex + 1] ?? id))
+  process.exit(0)
+}
+
 const roles = loadRoles(join(root, 'roles'))
 const plan = planRoles(roles, (dir) => existsSync(expand(dir)))
 const template = readFileSync(join(root, 'templates', 'preset.template.yml'), 'utf8')
