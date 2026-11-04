@@ -168,6 +168,17 @@ describe('renderRolesPatch', () => {
     expect(patch).toContain('order: 2')
   })
 
+  it('makes the main agent the default for new sessions', () => {
+    const patch = renderRolesPatch(template, planRoles([role({ id: 'pm', kind: 'core', delegates: true })], () => true))
+    expect(patch).toContain('agent-preset-registry')
+    expect(patch).toContain('default: pm')
+  })
+
+  it('leaves the default alone when the main agent is not mounted', () => {
+    const patch = renderRolesPatch(template, planRoles([role({ id: 'qa', kind: 'core' })], () => true))
+    expect(patch).not.toContain('default: pm')
+  })
+
   it('refuses a template missing a token', () => {
     expect(() => renderRolesPatch('nothing here', { enabled: [], blocked: [] })).toThrow(/missing \{\{PRESET_ID\}\}/u)
   })

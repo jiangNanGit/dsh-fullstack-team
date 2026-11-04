@@ -226,5 +226,18 @@ export function renderRolesPatch(template: string, plan: RolePlan): string {
     }
     blocks.push(block.trimEnd())
   })
+  // New sessions start as the main agent: the team is one thing the user talks
+  // to, not a menu of seven. Dispatch still reaches every role preset by id.
+  if (plan.enabled.some(({ role }) => role.id === 'pm')) {
+    blocks.push(
+      [
+        '- id: agent-preset-registry',
+        "  name: '@deepseek-ai/dsh-agent-preset-registry'",
+        '  config:',
+        '    default: pm',
+      ].join('\n'),
+    )
+  }
+
   return `${blocks.join('\n')}\n`
 }
