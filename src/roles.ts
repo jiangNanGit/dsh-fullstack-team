@@ -23,6 +23,8 @@ export interface RolePack {
   dir: string
   /** What to do when the pack is absent. */
   hint?: string
+  /** Narrow the pack; `*` means the pack is this role's whole kit. */
+  include?: string[]
 }
 
 /** One role, as declared by a `*.role.yml` manifest. */
@@ -162,6 +164,10 @@ export function renderRoleEntry(role: RoleManifest): string {
       lines.push(`${ENTRY_INDENT}      - name: ${pack.name}`)
       lines.push(`${ENTRY_INDENT}        dir: ${pack.dir}`)
       if (pack.hint !== undefined) lines.push(`${ENTRY_INDENT}        hint: ${JSON.stringify(pack.hint)}`)
+      if ((pack.include ?? []).length > 0) {
+        lines.push(`${ENTRY_INDENT}        include:`)
+        for (const name of pack.include ?? []) lines.push(`${ENTRY_INDENT}          - '${name}'`)
+      }
     }
   }
   lines.push(`${ENTRY_INDENT}    tools: true`)

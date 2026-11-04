@@ -138,11 +138,10 @@ function packSkills(pack: PackConfig, provider: string): SkillCandidate[] {
         (pack.hint === undefined ? 'Install the pack, or drop this role.' : `${pack.hint} (or drop this role)`),
     )
   }
-  return discoverSkills(directory, {
-    provider,
-    include: pack.include ?? [],
-    exclude: pack.exclude ?? [],
-  })
+  // `*` means the pack itself is the role's capability set, so it contributes
+  // every skill it holds; anything else narrows the pack.
+  const include = (pack.include ?? []).filter((name) => name !== '*')
+  return discoverSkills(directory, { provider, include, exclude: pack.exclude ?? [] })
 }
 
 /**
@@ -170,10 +169,12 @@ export function apply(ctx: DevflowContext, config: DevflowConfig = {}): void {
   const visible = new Set(config.include ?? [])
   const hidden = new Set(config.exclude ?? [])
   for (const pack of config.packs ?? []) {
+    const contributesAll = (pack.include ?? []).includes('*')
     for (const candidate of packSkills(pack, providerName)) {
       // A role's allowlist governs packs too: otherwise declaring a pack would
       // advertise every skill inside it and role isolation would be a comment.
-      if (visible.size > 0 && !visible.has(candidate.name)) continue
+      // `*` is the explicit exception — the pack is that role's whole kit.
+      if (!contributesAll && visible.size > 0 && !visible.has(candidate.name)) continue
       if (hidden.has(candidate.name)) continue
       if (claimed.has(candidate.name)) {
         throw new Error(

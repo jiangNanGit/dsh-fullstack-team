@@ -129,6 +129,13 @@ describe('skill packs', () => {
     expect((await provider.list()).map((candidate) => candidate.name)).toEqual(['flutter-widget'])
   })
 
+  it('lets a pack be the role’s whole kit when it declares *', async () => {
+    const dir = pack(scratch(), { 'flutter-widget': 'A', 'flutter-test': 'B' })
+    const provider = register({ include: ['role-init'], packs: [{ name: 'flutter', dir, include: ['*'] }] })
+    const names = (await provider.list()).map((candidate) => candidate.name)
+    expect(names).toEqual(['flutter-test', 'flutter-widget', 'role-init'])
+  })
+
   it('keeps an allowlist from leaking the rest of the pack', async () => {
     const dir = pack(scratch(), { 'flutter-widget': 'A', 'flutter-test': 'B' })
     const provider = register({ include: ['role-init', 'flutter-test'], packs: [{ name: 'flutter', dir }] })
