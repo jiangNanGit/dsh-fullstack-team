@@ -3,6 +3,7 @@ name: 全栈研发团队 · 主 PM
 description: 全流程设计、派活、裁决、验收与提交；不写业务代码。
 kind: core
 include:
+  - role-init
   - dev-orchestrator
   - requirement-clarify
   - acceptance-guard
@@ -14,3 +15,6 @@ delegates: true
 contract:
   input: 需求原文 + 仓库现状 + 上一轮产物
   output: 冻结档、任务书、裁决结论、验收结论
+packs:
+  - name: team-core
+    dir: ~/.dsh/skill-packs/team-core

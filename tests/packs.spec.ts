@@ -66,7 +66,7 @@ describe('skill packs', () => {
     const provider = register({ packs: [{ name: 'flutter', dir }] })
     const names = (await provider.list()).map((candidate) => candidate.name)
     expect(names).toContain('flutter-widget')
-    expect(names).toContain('dev-orchestrator')
+    expect(names).toContain('role-init')
   })
 
   it('points the pack’s candidates at the pack directory', async () => {
@@ -96,7 +96,7 @@ describe('skill packs', () => {
   })
 
   it('refuses a pack that collides with a shipped skill', () => {
-    const dir = pack(scratch(), { 'dev-orchestrator': '另一个流程入口' })
+    const dir = pack(scratch(), { 'role-init': '另一个流程入口' })
     expect(() => register({ packs: [{ name: 'flutter', dir }] })).toThrow(/collides/u)
   })
 
@@ -120,12 +120,19 @@ describe('skill packs', () => {
     expect(names).toContain('flutter-test')
     expect(names).not.toContain('flutter-widget')
     // The bundle's own allowlist is unaffected by the pack's.
-    expect(names).toContain('dev-orchestrator')
+    expect(names).toContain('role-init')
   })
 
   it('lets a role consist of nothing but its pack', async () => {
     const dir = pack(scratch(), { 'flutter-widget': 'A' })
-    const provider = register({ include: ['__none__'], packs: [{ name: 'flutter', dir }] })
+    const provider = register({ include: ['flutter-widget'], packs: [{ name: 'flutter', dir }] })
     expect((await provider.list()).map((candidate) => candidate.name)).toEqual(['flutter-widget'])
+  })
+
+  it('keeps an allowlist from leaking the rest of the pack', async () => {
+    const dir = pack(scratch(), { 'flutter-widget': 'A', 'flutter-test': 'B' })
+    const provider = register({ include: ['role-init', 'flutter-test'], packs: [{ name: 'flutter', dir }] })
+    const names = (await provider.list()).map((candidate) => candidate.name)
+    expect(names).toEqual(['flutter-test', 'role-init'])
   })
 })

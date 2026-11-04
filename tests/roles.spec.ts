@@ -45,7 +45,7 @@ describe('loadRoles', () => {
   it('keeps a stack role’s detector markers', () => {
     const flutter = loadRoles(join(repository, 'roles')).find((item) => item.id === 'mobile-flutter')
     expect(flutter?.detect).toEqual(['pubspec.yaml'])
-    expect(flutter?.packs?.[0]?.name).toBe('flutter')
+    expect(flutter?.packs?.map((pack) => pack.name)).toEqual(['team-core', 'flutter'])
   })
 
   it('marks only the main agent as a dispatcher', () => {

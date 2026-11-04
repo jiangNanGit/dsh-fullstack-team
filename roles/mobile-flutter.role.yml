@@ -5,6 +5,7 @@ kind: stack
 detect:
   - pubspec.yaml
 include:
+  - role-init
   - dev-orchestrator
   - impeccable
   - ui-theme-governance
@@ -12,6 +13,8 @@ contract:
   input: design.md + 契约 + 设计稿
   output: Flutter 实现与走查截图
 packs:
+  - name: team-core
+    dir: ~/.dsh/skill-packs/team-core
   - name: flutter
     dir: ~/.dsh/skill-packs/flutter
     hint: 把官方 Flutter skill 包解到该目录，或 dsh plugin add 装一个提供 flutter skill 的包

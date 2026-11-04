@@ -7,6 +7,7 @@ detect:
   - build.gradle
   - build.gradle.kts
 include:
+  - role-init
   - dev-orchestrator
   - requirement-clarify
   - acceptance-guard
@@ -14,3 +15,6 @@ include:
 contract:
   input: design.md + api-contract.md + 任务书
   output: 可编译代码与自测结果
+packs:
+  - name: team-core
+    dir: ~/.dsh/skill-packs/team-core

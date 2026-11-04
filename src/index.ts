@@ -167,8 +167,14 @@ export function apply(ctx: DevflowContext, config: DevflowConfig = {}): void {
   // name collision is an error rather than a silent override, because two
   // different copies of one skill is exactly the ambiguity this flow removes.
   const claimed = new Set(candidates.map((candidate) => candidate.name))
+  const visible = new Set(config.include ?? [])
+  const hidden = new Set(config.exclude ?? [])
   for (const pack of config.packs ?? []) {
     for (const candidate of packSkills(pack, providerName)) {
+      // A role's allowlist governs packs too: otherwise declaring a pack would
+      // advertise every skill inside it and role isolation would be a comment.
+      if (visible.size > 0 && !visible.has(candidate.name)) continue
+      if (hidden.has(candidate.name)) continue
       if (claimed.has(candidate.name)) {
         throw new Error(
           `dsh-fullstack-team: skill "${candidate.name}" from pack "${pack.name}" collides with a skill already advertised`,

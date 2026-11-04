@@ -3,6 +3,7 @@ name: 全栈研发团队 · 运维
 description: 发版、日志定位、线上只读排查与事故处置。
 kind: core
 include:
+  - role-init
   - ops-runbook
   - error-triage
   - yunxiao-projex-ops
@@ -10,3 +11,6 @@ include:
 contract:
   input: 发版单 / 告警 / 线上现象
   output: 处置记录与只读排查结论
+packs:
+  - name: team-core
+    dir: ~/.dsh/skill-packs/team-core

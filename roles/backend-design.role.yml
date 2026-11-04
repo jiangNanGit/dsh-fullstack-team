@@ -3,8 +3,12 @@ name: 全栈研发团队 · 后端设计
 description: 接口、模块、表结构、状态机；只产出文档，不写实现。
 kind: core
 include:
+  - role-init
   - dev-orchestrator
   - requirement-clarify
 contract:
   input: 需求冻结档 + 现有代码结构
   output: design.md 与 api-contract.md
+packs:
+  - name: team-core
+    dir: ~/.dsh/skill-packs/team-core

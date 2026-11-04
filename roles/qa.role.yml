@@ -3,9 +3,13 @@ name: 全栈研发团队 · 测试
 description: 端到端验收，前端到后端到数据库的数据核对，不做单点验证。
 kind: core
 include:
+  - role-init
   - dev-orchestrator
   - acceptance-guard
   - error-triage
 contract:
   input: 冻结档 + 契约文档 + 可运行环境
   output: acceptance-report.md，每条结论带证据
+packs:
+  - name: team-core
+    dir: ~/.dsh/skill-packs/team-core

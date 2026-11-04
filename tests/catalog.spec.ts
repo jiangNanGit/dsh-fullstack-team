@@ -9,18 +9,7 @@ import { apply, type DevflowConfig, type DevflowContext, type SkillProviderLike 
 const shipped = fileURLToPath(new URL('../skills/', import.meta.url))
 
 /** Skills this bundle is expected to ship; keep in sync with skills/. */
-const EXPECTED = [
-  'acceptance-guard',
-  'dev-orchestrator',
-  'error-triage',
-  'impeccable',
-  'ops-runbook',
-  'requirement-clarify',
-  'role-init',
-  'taste',
-  'ui-theme-governance',
-  'yunxiao-projex-ops',
-]
+const EXPECTED = ['role-init']
 
 const temporary: string[] = []
 
@@ -56,10 +45,9 @@ describe('shipped skills', () => {
   })
 
   it('keeps extra frontmatter as metadata', () => {
-    const impeccable = discoverSkills(shipped, { provider: 'dsh-fullstack-team' }).find(
-      (candidate) => candidate.name === 'impeccable',
-    )
-    expect(impeccable?.metadata?.['version']).toBeDefined()
+    const dir = fixture({ alpha: 'name: alpha\ndescription: first\nversion: 1.2.3' })
+    const alpha = discoverSkills(dir, { provider: 'p' }).find((candidate) => candidate.name === 'alpha')
+    expect(alpha?.metadata?.['version']).toBe('1.2.3')
   })
 })
 
@@ -160,9 +148,12 @@ describe('plugin', () => {
   })
 
   it('honours include as a role allowlist', async () => {
-    const provider = register({ include: ['dev-orchestrator', 'requirement-clarify'] })
-    const listed = await provider.list()
-    expect(listed.map((candidate) => candidate.name)).toEqual(['dev-orchestrator', 'requirement-clarify'])
+    const provider = register({ include: ['role-init'] })
+    expect((await provider.list()).map((candidate) => candidate.name)).toEqual(['role-init'])
+  })
+
+  it('refuses an allowlist that names a skill the machine does not have', () => {
+    expect(() => register({ include: ['dev-orchestrator'] })).toThrow(/no skills to advertise/u)
   })
 })
 
@@ -187,12 +178,14 @@ describe('rebaseResourcePaths', () => {
     expect(rebaseResourcePaths(text, 'impeccable', '/opt/bundle/skills/')).toBe(text)
   })
 
-  it('fixes the citations the shipped impeccable skill actually carries', () => {
-    const raw = readFileSync(join(shipped, 'impeccable', 'SKILL.md'), 'utf8')
-    const body = parseSkill(raw, join(shipped, 'impeccable', 'SKILL.md')).content
-    const rebased = rebaseResourcePaths(body, 'impeccable', shipped)
-    expect(body).toContain('.agent/skills/impeccable/')
-    expect(rebased).not.toContain('.agent/skills/')
-    expect(rebased).toContain(join(shipped, 'impeccable', 'scripts', 'impeccable'))
+  it('fixes citations in a skill’s real body', () => {
+    const dir = fixture({ alpha: 'name: alpha\ndescription: first' })
+    writeFileSync(
+      join(dir, 'alpha', 'SKILL.md'),
+      '---\nname: alpha\ndescription: first\n---\n\nrun `.agent/skills/alpha/scripts/go`\n',
+      'utf8',
+    )
+    const body = parseSkill(readFileSync(join(dir, 'alpha', 'SKILL.md'), 'utf8'), join(dir, 'alpha', 'SKILL.md')).content
+    expect(rebaseResourcePaths(body, 'alpha', dir)).toContain(join(dir, 'alpha', 'scripts', 'go'))
   })
 })

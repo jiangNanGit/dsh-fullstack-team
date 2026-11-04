@@ -6,6 +6,7 @@ detect:
   - package.json
   - vite.config.ts
 include:
+  - role-init
   - dev-orchestrator
   - impeccable
   - ui-theme-governance
@@ -13,3 +14,6 @@ include:
 contract:
   input: design.md + 契约 + UI 规范
   output: 实现代码与走查截图
+packs:
+  - name: team-core
+    dir: ~/.dsh/skill-packs/team-core

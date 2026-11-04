@@ -133,8 +133,12 @@
             config:
               providerName: dsh-fullstack-team
               include:
+                - role-init
                 - dev-orchestrator
                 - requirement-clarify
+              packs:
+                - name: team-core
+                  dir: ~/.dsh/skill-packs/team-core
               tools: true
 # Role preset example for dsh-fullstack-team: the standard preset with the flow plugin
 # hard-bound to one role. Copy this file, change `id`, `name`, and `include`.
@@ -271,10 +275,14 @@
             config:
               providerName: dsh-fullstack-team
               include:
+                - role-init
                 - ops-runbook
                 - error-triage
                 - yunxiao-projex-ops
                 - acceptance-guard
+              packs:
+                - name: team-core
+                  dir: ~/.dsh/skill-packs/team-core
               tools: true
 # Role preset example for dsh-fullstack-team: the standard preset with the flow plugin
 # hard-bound to one role. Copy this file, change `id`, `name`, and `include`.
@@ -417,6 +425,7 @@
             config:
               providerName: dsh-fullstack-team
               include:
+                - role-init
                 - dev-orchestrator
                 - requirement-clarify
                 - acceptance-guard
@@ -424,6 +433,9 @@
                 - ops-runbook
                 - yunxiao-projex-ops
                 - ui-theme-governance
+              packs:
+                - name: team-core
+                  dir: ~/.dsh/skill-packs/team-core
               tools: true
 # Role preset example for dsh-fullstack-team: the standard preset with the flow plugin
 # hard-bound to one role. Copy this file, change `id`, `name`, and `include`.
@@ -560,9 +572,13 @@
             config:
               providerName: dsh-fullstack-team
               include:
+                - role-init
                 - dev-orchestrator
                 - acceptance-guard
                 - error-triage
+              packs:
+                - name: team-core
+                  dir: ~/.dsh/skill-packs/team-core
               tools: true
 # Role preset example for dsh-fullstack-team: the standard preset with the flow plugin
 # hard-bound to one role. Copy this file, change `id`, `name`, and `include`.
@@ -699,10 +715,14 @@
             config:
               providerName: dsh-fullstack-team
               include:
+                - role-init
                 - dev-orchestrator
                 - requirement-clarify
                 - acceptance-guard
                 - ops-runbook
+              packs:
+                - name: team-core
+                  dir: ~/.dsh/skill-packs/team-core
               tools: true
 # Role preset example for dsh-fullstack-team: the standard preset with the flow plugin
 # hard-bound to one role. Copy this file, change `id`, `name`, and `include`.
@@ -839,8 +859,12 @@
             config:
               providerName: dsh-fullstack-team
               include:
+                - role-init
                 - dev-orchestrator
                 - impeccable
                 - ui-theme-governance
                 - acceptance-guard
+              packs:
+                - name: team-core
+                  dir: ~/.dsh/skill-packs/team-core
               tools: true
