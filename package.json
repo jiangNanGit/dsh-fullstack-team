@@ -58,7 +58,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm test && pnpm build",
-    "prepack": "pnpm build"
+    "prepack": "pnpm build",
+    "audit:skills": "node scripts/skill-audit.mjs skills"
   },
   "dependencies": {
     "yaml": "^2.8.1"

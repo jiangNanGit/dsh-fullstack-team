@@ -46,8 +46,12 @@ for (const root of roots) {
   for (const path of walk(root)) {
     const lines = readFileSync(path, 'utf8').split('\n')
     lines.forEach((line, index) => {
+      // A link to someone else's documentation is not a project fact: strip
+      // URLs before looking for hosts and endpoints, or every external
+      // reference reads as a violation.
+      const scanned = line.replace(/https?:\/\/\S+/gu, '<url>')
       for (const [label, pattern] of PATTERNS) {
-        if (!pattern.test(line)) continue
+        if (!pattern.test(scanned)) continue
         findings += 1
         console.log(`${path}:${index + 1}  [${label}]  ${line.trim().slice(0, 90)}`)
       }
