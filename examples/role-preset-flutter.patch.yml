@@ -133,7 +133,7 @@
           - id: dsh-fullstack-team-flutter
             name: dsh-fullstack-team
             config:
-              providerName: dsh-fullstack-team-flutter
+              providerName: dsh-fullstack-team
               include:
                 - dev-orchestrator
                 - acceptance-guard

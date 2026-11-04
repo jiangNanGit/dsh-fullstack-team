@@ -10,7 +10,7 @@ That is different from a project pool. The project pool (`<repo>/.agents/skills`
 - id: dsh-fullstack-team-flutter
   name: dsh-fullstack-team
   config:
-    providerName: dsh-fullstack-team-flutter
+    providerName: dsh-fullstack-team
     include:
       - dev-orchestrator
       - acceptance-guard
@@ -19,7 +19,11 @@ That is different from a project pool. The project pool (`<repo>/.agents/skills`
         dir: ~/.dsh/skill-packs/flutter
 ```
 
-`dir` accepts an absolute path, a `~` path, or a path relative to the session cwd. `include` / `exclude` inside a pack apply to that pack only, so a pack can be trimmed per role without touching the bundle's own kit.
+`providerName` identifies the plugin, not the role: it stays `dsh-fullstack-team` in every preset (that is what `renderRoleEntry` writes). Isolation comes from the preset's own scope, not from a per-role provider name.
+
+`dir` accepts an absolute path, a `~` path, or a path relative to the session cwd. `include` / `exclude` inside a pack apply to that pack only, so a pack can be trimmed per role without touching the bundle's own kit. The top-level `include` is literal (`*` is not a wildcard there); `*` means "the whole pack" only inside a pack's own `include:`.
+
+Check a pack before mounting a role with `node scripts/roles.mjs` (from the package root; a source checkout needs `pnpm build` first) and audit its contents with `node scripts/skill-audit.mjs ~/.dsh/skill-packs/<name>`.
 
 ## What a missing pack does
 

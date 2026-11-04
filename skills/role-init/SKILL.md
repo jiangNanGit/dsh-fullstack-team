@@ -13,27 +13,45 @@ description: 角色初始化与角色创造规程——主智能体接手一个�
 
 | 标记文件 | 角色 id |
 | --- | --- |
-| `pom.xml` / `build.gradle` / `build.gradle.kts` | `backend-java` |
-| `package.json` + `vite.config.*` | `frontend-vue` |
+| `pom.xml` 或 `build.gradle`/`build.gradle.kts` | `backend-java` |
+| `package.json` + `vite.config.*`（同一组，两个都要在） | `frontend-vue` |
 | `pubspec.yaml` | `mobile-flutter` |
 
-**唯一事实来源是本插件 `roles/*.role.yml` 的 `detect` 字段**，表只是给人看的速查。manifest 新增角色，本 skill 无需修改。
+`detect` 的判定语义是**组内 AND、组间 OR**：`detect` 的每一项是一个「组」，字符串即单元素组；命中条件 = 存在**某一组**，组内每个标记都在仓库根目录里。所以 Java 那行写三个单元素组 = 三选一，Vue 那行把两个标记放进同一组 = 缺一不可（单凭 `package.json` 会把任意 Node 仓误判成 Vue）。
+
+**唯一事实来源是本插件 `roles/*.role.yml` 的 `detect` 字段**，表只是给人看的速查。manifest 新增角色，本 skill 无需修改。判定规则的代码落点是 `src/roles.ts` 的 `roleMatches(role, markers)`；`node scripts/roles.mjs` 输出的「本仓命中」列就是它算的。
 
 一个仓库命中多个 → 装多个角色。没有任何命中 → **不要猜，也不要停**：继续看 README、构建脚本、CI 配置、目录结构，直到能判定技术栈；判不出来就走第五节的「创造」——先造一个能识别它的角色。
 
 ## 二、定角色：core 恒装，stack 按命中
 
 - **core**（`pm` / `backend-design` / `qa` / `ops`）：每个项目都装
-- **stack**（`backend-java` / `frontend-vue` / `mobile-flutter`）：命中才装
+- **stack**（`backend-java` / `frontend-vue` / `mobile-flutter` / `dsh-plugin-dev`）：命中才装
 
 ## 三、校验装备：先算，再装
+
+### 先定包根
+
+本技能随包发布，模型拿到的技能目录是 `<pkg>/skills/role-init/`（DSH 会以 `Base directory for this skill` 的形式给出）。本技能其余所有命令都在**包根**执行，而包根 = 技能目录的**上两级** = `<skill 目录>/../..`：
+
+```bash
+PKG="$(cd "<skill 目录>/../.." && pwd)"   # <pkg>/skills/role-init/ → <pkg>
+ls "$PKG/scripts"                          # 应看到 roles.mjs / skill-audit.mjs；看不到就是层级算错了
+cd "$PKG"
+```
+
+`<skill 目录>` 不要凭感觉拼：取 DSH 报给你的 `Base directory for this skill`。连它都拿不到，就直接问用户要包根——**不要拿 `pwd` 假设当前目录就是包根**，技能目录永远不是包根。
 
 ```bash
 node scripts/roles.mjs          # 报告：谁能装、谁缺什么、缺的在哪
 node scripts/roles.mjs --write  # 生成 presets/roles.patch.yml
 ```
 
+这两条是相对路径，只有当前目录是包根时才成立；换目录执行会报找不到文件。脚本自身按脚本位置解析路径，所以不在包根时也可用绝对路径绕开：`node "$PKG/scripts/roles.mjs" --write`。但别把「在当前目录执行」和「在包根执行」混为一谈。
+
 缺包的角色**会被插件拒绝启动**，不会降级运行。所以先算清楚再装。
+
+源码目录里首次运行前必须先 `pnpm build`：`scripts/roles.mjs` 从构建产物 `lib/roles.js` 导入，include 预检跑的是上次构建的代码（安装形态已带 `lib/`，无需构建）。
 
 ## 四、缺能力：五级处置，逐级下沉
 
@@ -41,7 +59,7 @@ node scripts/roles.mjs --write  # 生成 presets/roles.patch.yml
 
 1. **预置** —— 本插件 `skills/` 已带，直接用
 2. **已有** —— `~/.dsh/skill-packs/<name>/` 或项目 `.agents/skills` 里已有，直接挂
-3. **可安装** —— 用插件市场或 npm 搜到（关键词如 `flutter skill`、`dsh flutter`），请用户确认后安装，装完重跑 `--write`
+3. **可安装** —— 用插件市场或 npm 搜到（关键词如 `flutter skill`、`dsh flutter`），请用户确认后安装，装完回到包根重跑 `node scripts/roles.mjs --write`（包根见第三节）
 4. **可检索** —— 全网搜索该能力的官方文档、社区技能包、最佳实践；评估后安装，或据此提炼技能内容
 5. **创造** —— 上面都没有，就按设计规范造一个
 
@@ -62,6 +80,7 @@ node scripts/roles.mjs --write  # 生成 presets/roles.patch.yml
 ### 造角色：三步
 
 ```bash
+# 在包根执行；包根怎么得出，见第三节「先定包根」
 node scripts/roles.mjs new backend-go --name "后端开发（Go）"
 ```
 
@@ -93,9 +112,14 @@ contract:
 ### 造完必须验证
 
 ```bash
-node scripts/roles.mjs --write     # 角色能装配
-pnpm test                          # 清单与渲染没被写坏
+cd "<skill 目录>/../.."           # 包根 = 技能目录上两级，见第三节
+node scripts/roles.mjs --write    # 角色能装配
+pnpm test                         # 清单与渲染没被写坏
 ```
+
+`pnpm test` 只能在**包的源码目录**执行：它跑 vitest，依赖 `tests/`、`src/` 和 devDependencies，而**发布包不含 tests/ 与 src/**。安装形态（包只存在于 `node_modules/` 或 DSH 安装目录）下不要尝试——缺源码时它必然失败，那是形态问题，不是代码坏了。
+
+拿不到源码目录时（`ls "$PKG/tests"` 不存在即为此情形），这条验证做不了：**把「`pnpm test` 未执行，原因是没有源码目录」报告给用户**，同时说明 `roles.mjs --write` 已通过、清单是否可信仍需用户在有源码的机器上确认。禁止用别的手段冒充「验证通过」。
 
 ## 六、落地：写进配置，不写进项目
 

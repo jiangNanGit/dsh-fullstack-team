@@ -1,9 +1,9 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { flowTools } from '../src/tools'
-import { STATE_FILE } from '../src/state'
+import { FAILURE_BUDGETS, FAILURE_TYPES, STATE_FILE } from '../src/state'
 
 const temporary: string[] = []
 
@@ -100,5 +100,116 @@ describe('flowTools', () => {
     const root = workspace()
     const [, state] = flowTools()
     await expect(call(state, { action: 'rework', root })).rejects.toThrow(/needs a `failure`/u)
+  })
+})
+
+describe('flowTools · safety and budgets', () => {
+  it('declares exactly six failure types on the parameter enum', () => {
+    const [, state] = flowTools()
+    const parameters = (state as unknown as {
+      parameters?: { properties?: { failure?: { enum?: string[] } } }
+    }).parameters
+    const declared = parameters?.properties?.failure?.enum
+    expect(declared).toEqual([...FAILURE_TYPES])
+    expect(declared).not.toContain('DEPLOY_FALSE_GREEN')
+    expect(declared).toHaveLength(6)
+  })
+
+  it('refuses advance through the tool once the stage budget is exhausted', async () => {
+    const root = workspace({ 'requirement.md': '# 需求\n\n## 功能点\n- FP-1 创建订单\n' })
+    const [, state] = flowTools()
+    for (let index = 0; index < 3; index += 1) {
+      await call(state, { action: 'rework', root, failure: 'IMPL_MISMATCH' })
+    }
+
+    const blocked = await call(state, { action: 'advance', root })
+    expect(blocked['pass']).toBe(false)
+    expect(blocked['advanced']).toBe(false)
+    expect((blocked['findings'] as { code: string }[]).map((item) => item.code)).toContain(
+      'REWORK_BUDGET_EXHAUSTED',
+    )
+
+    const read = await call(state, { action: 'read', root })
+    const message = String(read['message'])
+    expect(message).toContain('exhausted')
+    expect(message).toContain('上报')
+  })
+
+  it('reports a corrupt state instead of silently resetting', async () => {
+    const root = workspace({ [STATE_FILE]: '{broken' })
+    const [, state] = flowTools()
+    await expect(call(state, { action: 'read', root })).rejects.toThrow(/not valid JSON/u)
+  })
+
+  it('rejects a relative root', async () => {
+    const [, state] = flowTools()
+    await expect(call(state, { action: 'read', root: '.' })).rejects.toThrow(/must be absolute/u)
+  })
+
+  it('surfaces a failure type this version no longer knows', async () => {
+    const root = workspace({
+      [STATE_FILE]: JSON.stringify({ version: 1, stage: 'test', rework: { DEPLOY_FALSE_GREEN: 2 }, history: [] }),
+    })
+    const [, state] = flowTools()
+    const read = await call(state, { action: 'read', root })
+    expect(String(read['message'])).toContain('DEPLOY_FALSE_GREEN')
+    expect(String(read['message'])).toContain('ignored')
+  })
+})
+
+describe('documented口径', () => {
+  const codes = [
+    'FILE_MISSING',
+    'FILE_NOT_FILE',
+    'FILE_EMPTY',
+    'PLACEHOLDER',
+    'EMPTY_SECTION',
+    'SECTION_MISSING',
+    'FP_MISSING',
+    'FP_UNCOVERED',
+    'FP_ORPHAN',
+    'TEST_CASE_EMPTY',
+    'CONTRACT_MISSING',
+    'CONTRACT_UNDESIGNED',
+    'VERDICT_SHORTFALL',
+    'VERDICT_MISSING',
+    'ACCEPT_EVIDENCE_MISSING',
+    'P0_OPEN',
+    'REVIEW_ITEM_NO_VERDICT',
+    'REVIEW_EVIDENCE_MISSING',
+    'EVIDENCE_MISSING',
+    'EVIDENCE_OUT_OF_RANGE',
+    'EVIDENCE_OUTSIDE_ROOT',
+    'UI_ACCEPTANCE_WAIVED',
+    'UI_WAIVER_NO_REASON',
+    'REWORK_BUDGET_EXHAUSTED',
+  ]
+
+  it('docs/001 speaks of six stages, four gates plus one check, and the 30-item machine floor', () => {
+    const doc = readFileSync(resolve('docs/001-design.md'), 'utf8')
+    expect(doc).not.toContain('五道门')
+    expect(doc).not.toContain('七步')
+    expect(doc).toContain('六阶段')
+    expect(doc).toContain('四道阶段门')
+    expect(doc).toContain('115 条')
+    expect(doc).toContain('30 条')
+  })
+
+  it('docs/003 lists every finding code and the six stage-scoped budgets', () => {
+    const doc = readFileSync(resolve('docs/003-tools.md'), 'utf8')
+    for (const code of codes) expect(doc).toContain(code)
+    expect(doc).not.toContain('DEPLOY_FALSE_GREEN')
+
+    const budgeted = new Map<string, number>()
+    for (const match of doc.matchAll(/\| `([A-Z0-9_]+)` \| (\d+) \|/gu)) {
+      const [, type, budget] = match
+      if (type !== undefined && budget !== undefined) budgeted.set(type, Number(budget))
+    }
+    expect(Object.fromEntries(budgeted)).toEqual({ ...FAILURE_BUDGETS })
+  })
+
+  it('docs/003 documents the artifacts the test and accept gates read', () => {
+    const doc = readFileSync(resolve('docs/003-tools.md'), 'utf8')
+    for (const name of ['test-report.md', 'ui-acceptance.md', 'review-notes.md']) expect(doc).toContain(name)
   })
 })

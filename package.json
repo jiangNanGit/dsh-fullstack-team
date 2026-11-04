@@ -28,10 +28,14 @@
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
   },
   "files": [
     "lib",
+    "locale/*.json",
+    "icon.svg",
     "skills",
     "cordis.patch.yml",
     "roles",
@@ -57,9 +61,10 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "check": "pnpm typecheck && pnpm test && pnpm audit:skills && pnpm build",
     "prepack": "pnpm build",
-    "audit:skills": "node scripts/skill-audit.mjs skills"
+    "audit:skills": "node scripts/skill-audit.mjs skills",
+    "presets:install": "node scripts/install-presets.mjs"
   },
   "dependencies": {
     "yaml": "^2.8.1"

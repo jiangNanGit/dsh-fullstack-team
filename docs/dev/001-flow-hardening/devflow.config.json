@@ -1,0 +1,6 @@
+{
+  "ui": {
+    "applicable": false,
+    "reason": "本仓是 DSH bundle（Host-only 插件），无界面、无设计稿；ui-acceptance.md 不适用，界面检查以「插件页展示元数据」与「工具/技能行为」替代。"
+  }
+}

@@ -20,10 +20,36 @@
 ## 检查方式
 
 ```bash
+# 体检一个技能包；项目事实清单缺省时只跑通用规则
 node scripts/skill-audit.mjs ~/.dsh/skill-packs/team-core
+
+# 指定项目事实清单
+node scripts/skill-audit.mjs skills --facts /path/to/project-facts.json
 ```
 
-七类模式：项目/公司名、业务仓名、主机或连接串、接口路径、业务表名、口令或手机号、本机绝对路径。命中即列出 `文件:行号`。
+脚本位于包根 `scripts/`（本仓即包根，`docs/` 的上一级），需在包根执行——上面的 `scripts/skill-audit.mjs` 是相对路径，换个目录就找不到文件；也可改用绝对路径 `<包根>/scripts/skill-audit.mjs` 在任意目录调用。被体检的 `~/.dsh/skill-packs/team-core` 是用户侧的技能包，与包根无关，照写即可。`pnpm audit:skills` 等价于 `node scripts/skill-audit.mjs skills`，已并入 `pnpm check`。
+
+规则分两套：
+
+- **通用规则（始终启用，无需配置）**，四类：本机绝对路径、口令或手机号、接口路径、主机或连接串。这些事实在任何项目里都是错的，所以写死在脚本里。
+- **项目规则（可选，来自 `project-facts.json`）**：公司名、业务仓名、表前缀、表名、主机、接口、账号，以及自定义词条。脚本自身不携带任何项目事实；没有这个文件就只跑通用规则，并在输出里明说「未找到 project-facts.json，只用通用规则」。
+
+`project-facts.json` 放在工作区根。查找顺序：`--facts <file>` → `<cwd>/project-facts.json` → 本仓根 `project-facts.json`。所有键均可省略，值是字符串或字符串数组，**按字面量匹配，不是正则**（下面各值是示意，实际填本项目自己的）：
+
+```json
+{
+  "companyNames": ["某某公司", "某某品牌"],
+  "repoNames": ["mall-manage", "merchant-web"],
+  "tablePrefixes": ["biz_", "t_"],
+  "tableNames": ["biz_order", "sys_user"],
+  "hosts": ["rds.example.internal"],
+  "endpoints": ["/api/order/list"],
+  "accounts": ["admin1", "13800138000"],
+  "extraRules": [{ "label": "业务术语", "pattern": "双十一会场" }]
+}
+```
+
+`$` 或 `_` 开头的键视为注释；未知键或类型不对是错误（退出码 2），不会静默跳过——拼错的键正好会藏住要查的东西。命中即列出 `文件:行号`。
 
 检测到就是不合格，没有"轻微违规"这一档。
 

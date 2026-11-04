@@ -1,0 +1,50 @@
+{
+  "version": 2,
+  "stage": "ship",
+  "reworkStage": "ship",
+  "rework": {
+    "DESIGN_UNFEASIBLE": 0,
+    "CONTRACT_GAP": 0,
+    "CONTRACT_CONFLICT": 0,
+    "IMPL_MISMATCH": 0,
+    "TEST_FAIL": 0,
+    "ACCEPT_P0": 0
+  },
+  "history": [
+    {
+      "at": "2026-11-04T10:33:09.417Z",
+      "action": "advance",
+      "stage": "clarify",
+      "to": "design",
+      "note": "batch-1/2/3 done"
+    },
+    {
+      "at": "2026-11-04T10:33:09.448Z",
+      "action": "advance",
+      "stage": "design",
+      "to": "build",
+      "note": "gates green"
+    },
+    {
+      "at": "2026-11-04T10:33:09.451Z",
+      "action": "advance",
+      "stage": "build",
+      "to": "test",
+      "note": "report written"
+    },
+    {
+      "at": "2026-11-04T10:33:09.465Z",
+      "action": "advance",
+      "stage": "test",
+      "to": "accept",
+      "note": "accept closed"
+    },
+    {
+      "at": "2026-11-04T10:33:16.008Z",
+      "action": "advance",
+      "stage": "accept",
+      "to": "ship",
+      "note": "accept verified: 29/29, P0 cleared"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 /**
- * The five stage gates.
+ * The stage gates.
  *
  * Each gate is a pure read: it reports whether the artifacts of one stage are
  * fit to be consumed by the next one. What to do about a failure — rework,
@@ -13,7 +13,7 @@
  * @module dsh-fullstack-team/gates/stages
  */
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   checkArtifactBasics,
@@ -21,13 +21,24 @@ import {
   checkEvidence,
   checkOrphans,
   countVerdicts,
+  evidenceRefs,
   extractIds,
+  fpWindows,
+  hasVerdict,
   FP_PATTERN,
+  loadGateConfig,
   readArtifact,
+  reportsOpenP0,
   resolveRoot,
+  window,
+  CONFIG_FILE,
   type Artifact,
+  type GateConfig,
 } from './artifact'
 import { finding, type Finding, type GateResult, type GatedStage } from './types'
+
+export { CONFIG_FILE, loadGateConfig, reportsOpenP0 }
+export type { GateConfig }
 
 /** Conventional artifact names; a project may rename them in the config. */
 export const DEFAULT_FILES = {
@@ -36,48 +47,14 @@ export const DEFAULT_FILES = {
   design: 'design.md',
   contract: 'api-contract.md',
   testcases: 'test-cases.md',
+  testreport: 'test-report.md',
   review: 'review-notes.md',
   acceptance: 'acceptance-report.md',
+  uiacceptance: 'ui-acceptance.md',
 } as const
 
 /** One artifact name the gates read. */
 export type ArtifactKey = keyof typeof DEFAULT_FILES
-
-/** Per-project gate configuration, read from `devflow.config.json`. */
-export interface GateConfig {
-  /** File name overrides, relative to the gate root. */
-  files?: Partial<Record<ArtifactKey, string>>
-  /** Section titles the requirement must contain. */
-  requirementSections?: string[]
-  /** Section titles the design must contain. */
-  designSections?: string[]
-  /** Section titles the test-case document must contain. */
-  testCaseSections?: string[]
-  /** Section titles the acceptance report must contain. */
-  acceptanceSections?: string[]
-  /** Minimum verdict tokens a review document must carry. */
-  reviewMinVerdicts?: number
-}
-
-/** Configuration file read from the gate root. */
-export const CONFIG_FILE = 'devflow.config.json'
-
-/**
- * Load `devflow.config.json` from the gate root when present.
- *
- * @param root - Absolute gate root.
- * @returns The declared configuration, or an empty one.
- * @throws When the file exists but is not a JSON object.
- */
-export function loadGateConfig(root: string): GateConfig {
-  const path = join(root, CONFIG_FILE)
-  if (!existsSync(path)) return {}
-  const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`dsh-fullstack-team: ${CONFIG_FILE} must contain a JSON object`)
-  }
-  return parsed as GateConfig
-}
 
 /** Resolve one artifact name, honouring the project override. */
 function fileName(config: GateConfig, key: ArtifactKey): string {
@@ -113,33 +90,124 @@ export interface Endpoint {
   method?: string
 }
 
-/** A method plus an absolute path, or just a path. */
-const ENDPOINT_SPAN = /^(?:(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+)?(\/[\w\-./{}:]+)$/u
+/** Methods a table cell may name on its own. */
+const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
+
+/**
+ * Characters that disqualify a candidate outright.
+ *
+ * Prose (`/must be absolute/`), placeholders (`/orders/<id>`), wildcards
+ * (`/api/*`), and regex literals (`/^\/v1$/`) all start with a slash and end in
+ * something that no real route contains. A real route is a slash-led run of
+ * path characters: whitespace, angle brackets, the glob star, the regex
+ * anchors, and the escape backslash are never part of one.
+ */
+const NOT_A_PATH = /[\s<>*^$\\]/u
+
+/** Strip the Markdown shells a document puts around an endpoint. */
+function unwrap(raw: string): string {
+  return raw.replace(/\*\*/gu, '').replace(/`/gu, '').trim()
+}
+
+/**
+ * Parse one endpoint mention.
+ *
+ * The path is normalised before comparison: the query string, the fragment, and
+ * a trailing slash are presentation, not identity. A mention without a leading
+ * slash is not an endpoint at all — a command, a field name, or a file path is
+ * not a route.
+ *
+ * @param raw - One candidate, already isolated (inline code span, heading, cell).
+ * @returns The endpoint, or `undefined` when the text is not one.
+ */
+export function parseEndpoint(raw: string): Endpoint | undefined {
+  const text = unwrap(raw)
+  if (text.length === 0) return undefined
+
+  let method: string | undefined
+  let rest = text
+  const withMethod = /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\S+)$/iu.exec(text)
+  if (withMethod?.[1] !== undefined && withMethod[2] !== undefined) {
+    method = withMethod[1].toUpperCase()
+    rest = withMethod[2]
+  }
+
+  let path = rest.split('?')[0]?.split('#')[0] ?? ''
+  if (path.length > 1) path = path.replace(/\/+$/u, '')
+  // Re-check after normalisation: `?q=/x` must not turn a word into a route.
+  if (!path.startsWith('/') || path === '/') return undefined
+  // A bare `/` is the filesystem root or a prose flourish, not a route; the
+  // same goes for prose and regex literals, which contain whitespace.
+  if (NOT_A_PATH.test(path)) return undefined
+  return method === undefined ? { path } : { path, method }
+}
+
+/** Split a Markdown table row into trimmed cells, honouring `\|`. */
+function tableCells(line: string): string[] {
+  const trimmed = line.trim()
+  if (!trimmed.startsWith('|')) return []
+  const parts = trimmed.split(/(?<!\\)\|/u)
+  // A leading and a trailing pipe produce empty strings at both ends.
+  if (parts[0]?.trim() === '') parts.shift()
+  if (parts[parts.length - 1]?.trim() === '') parts.pop()
+  return parts.map((cell) => unwrap(cell))
+}
 
 /**
  * Extract the endpoints a document mentions.
  *
- * Endpoints show up in two shapes in practice: inline code (`` `POST /x` ``) in a
- * design, and headings (`### POST /x`) in a contract. Both are read here, and
- * the method is kept when present so `DELETE /orders` is not mistaken for
- * `POST /orders`.
+ * Three sources, because those are the three shapes that occur in practice:
+ * inline code (`` `POST /x` ``) in a design, headings (`### POST /x`) in a
+ * contract, and Markdown table rows (`| POST | /x |`). Fenced code blocks are
+ * skipped for the table source only: an example table is documentation of a
+ * document, not the contract itself.
  */
 export function endpoints(text: string): Endpoint[] {
   const found = new Map<string, Endpoint>()
-  const add = (raw: string): void => {
-    const match = ENDPOINT_SPAN.exec(raw.trim())
-    const path = match?.[2]
-    if (path === undefined) return
-    const method = match?.[1]
-    const key = `${method ?? ''} ${path}`
+  const add = (candidate: Endpoint | undefined): void => {
+    if (candidate === undefined) return
+    const key = `${candidate.method ?? ''} ${candidate.path}`
     if (found.has(key)) return
-    found.set(key, method === undefined ? { path } : { path, method })
+    found.set(key, candidate)
   }
-  for (const match of text.matchAll(/`([^`\n]+)`/gu)) add(match[1] ?? '')
+
+  let fenced = false
   for (const line of text.split(/\r?\n/u)) {
+    if (/^\s*(?:```|~~~)/u.test(line)) {
+      fenced = !fenced
+      continue
+    }
+
+    const cells = tableCells(line)
+    if (cells.length > 0 && !fenced) {
+      // Pair a method cell with the path cell next to it first, so the path
+      // cell does not also register as a method-less endpoint.
+      const consumed = new Set<number>()
+      for (const [index, cell] of cells.entries()) {
+        const upper = cell.toUpperCase()
+        if (!(METHODS as readonly string[]).includes(upper)) continue
+        const pathCell = cells[index + 1]
+        if (pathCell === undefined) continue
+        const parsed = parseEndpoint(pathCell)
+        if (parsed === undefined || parsed.method !== undefined) continue
+        add({ path: parsed.path, method: upper })
+        consumed.add(index)
+        consumed.add(index + 1)
+      }
+      for (const [index, cell] of cells.entries()) {
+        if (consumed.has(index)) continue
+        add(parseEndpoint(cell))
+      }
+      continue
+    }
+
+    // Inline code and headings are scanned inside fenced blocks too: only the
+    // table source is skipped there, because an example table is documentation.
+    for (const match of line.matchAll(/`([^`\n]+)`/gu)) add(parseEndpoint(match[1] ?? ''))
     const heading = /^#{1,6}\s+(.+?)\s*$/u.exec(line)
-    if (heading?.[1] !== undefined) add(heading[1])
+    if (heading?.[1] !== undefined) add(parseEndpoint(heading[1]))
   }
+
   return [...found.values()]
 }
 
@@ -158,19 +226,6 @@ export function unmatchedEndpoints(source: readonly Endpoint[], target: readonly
 /** Render an endpoint for a finding message. */
 function endpointLabel(endpoint: Endpoint): string {
   return endpoint.method === undefined ? endpoint.path : `${endpoint.method} ${endpoint.path}`
-}
-
-/**
- * Whether a line reports a P0 that is still open.
- *
- * A count of zero is closed, not open: `P0 遗留：0` must not block a release.
- */
-export function reportsOpenP0(line: string): boolean {
-  if (!/\bP0\b/u.test(line)) return false
-  if (!/(open|unfixed|未修复|待修复|遗留)/iu.test(line)) return false
-  const numbers = [...line.matchAll(/\d+/gu)].map((match) => Number(match[0]))
-  if (numbers.length === 0) return true
-  return numbers.some((value) => value > 0)
 }
 
 /** Gate 1 — requirement freeze: the brief exists and still has open questions. */
@@ -223,14 +278,23 @@ function designGate(root: string, config: GateConfig): GateResult {
   return { stage: 'design', pass: !findings.some((item) => item.severity === 'error'), findings, checked }
 }
 
-/** Gate 3 — test cases: every functional point is covered, and nothing extra. */
+/**
+ * Gate 3 — test cases and the execution report: every functional point is
+ * covered by a case, and the run was actually reported.
+ *
+ * The report is only checked for existence and substance; per-functional-point
+ * evidence belongs to the acceptance gate, and checking it twice would block
+ * the same defect twice.
+ */
 function testGate(root: string, config: GateConfig): GateResult {
   const findings: Finding[] = []
   const checked: string[] = []
   const requirement = read(root, config, 'requirement', [], findings)
   const testcases = read(root, config, 'testcases', config.testCaseSections ?? [], findings)
+  const report = read(root, config, 'testreport', config.testReportSections ?? [], findings)
   if (requirement !== undefined) checked.push(requirement.path)
   if (testcases !== undefined) checked.push(testcases.path)
+  if (report !== undefined) checked.push(report.path)
 
   if (requirement !== undefined && testcases !== undefined) {
     const declared = extractIds(requirement.text, FP_PATTERN)
@@ -245,7 +309,7 @@ function testGate(root: string, config: GateConfig): GateResult {
   return { stage: 'test', pass: !findings.some((item) => item.severity === 'error'), findings, checked }
 }
 
-/** Gate 4 — acceptance: every functional point carries a verdict and no P0 is open. */
+/** Gate 4 — acceptance: every functional point carries a verdict with evidence, no P0 is open. */
 function acceptGate(root: string, config: GateConfig): GateResult {
   const findings: Finding[] = []
   const checked: string[] = []
@@ -253,6 +317,38 @@ function acceptGate(root: string, config: GateConfig): GateResult {
   const acceptance = read(root, config, 'acceptance', config.acceptanceSections ?? [], findings)
   if (requirement !== undefined) checked.push(requirement.path)
   if (acceptance !== undefined) checked.push(acceptance.path)
+
+  // Whether the UI artifact applies is a configuration fact. A report that says
+  // «不适用» cannot waive itself; only the project configuration can, and it
+  // must say why, or the waiver is just a way to skip the artifact.
+  if (config.ui?.applicable ?? true) {
+    const ui = read(root, config, 'uiacceptance', config.uiAcceptanceSections ?? [], findings)
+    if (ui !== undefined) {
+      checked.push(ui.path)
+      findings.push(...checkEvidence(root, ui))
+    }
+  } else {
+    const reason = config.ui?.reason?.trim() ?? ''
+    if (reason.length === 0) {
+      findings.push(
+        finding(
+          'UI_WAIVER_NO_REASON',
+          `${CONFIG_FILE} sets ui.applicable=false without a ui.reason; a waiver must say why no UI artifact exists`,
+          { path: CONFIG_FILE },
+        ),
+      )
+    } else {
+      findings.push(
+        finding(
+          'UI_ACCEPTANCE_WAIVED',
+          `ui-acceptance.md is waived by ${CONFIG_FILE}: ${reason}`,
+          { severity: 'warning', path: CONFIG_FILE },
+        ),
+      )
+    }
+  }
+
+  if (acceptance !== undefined) findings.push(...checkEvidence(root, acceptance))
 
   if (requirement !== undefined && acceptance !== undefined) {
     const declared = extractIds(requirement.text, FP_PATTERN)
@@ -267,6 +363,34 @@ function acceptGate(root: string, config: GateConfig): GateResult {
           { path: acceptance.path },
         ),
       )
+    }
+
+    for (const id of declared) {
+      const windows = fpWindows(acceptance, id)
+      if (windows.length === 0) continue
+      const first = windows[0]
+      if (first === undefined) continue
+      const verdictWindow = windows.find((item) => hasVerdict(item.text))
+      if (verdictWindow === undefined) {
+        findings.push(
+          finding('VERDICT_MISSING', `${acceptance.path}: no verdict for ${id}`, {
+            path: acceptance.path,
+            line: first.line,
+          }),
+        )
+        continue
+      }
+      // Evidence and verdict must share a window: a citation next to another
+      // item cannot vouch for this one.
+      const satisfied = windows.some((item) => hasVerdict(item.text) && evidenceRefs(item.text).length > 0)
+      if (!satisfied) {
+        findings.push(
+          finding('ACCEPT_EVIDENCE_MISSING', `${acceptance.path}: no path:line evidence for ${id}`, {
+            path: acceptance.path,
+            line: first.line,
+          }),
+        )
+      }
     }
   }
 
@@ -309,16 +433,43 @@ function reviewGate(root: string, config: GateConfig): ReviewResult {
       }),
     )
   }
+  // Every line that states a verdict must carry evidence in its own window: a
+  // checklist of thirty «通过» lines is not a review.
+  for (const [index, line] of review.lines.entries()) {
+    if (!hasVerdict(line)) continue
+    if (evidenceRefs(window(review, index).text).length > 0) continue
+    findings.push(
+      finding('REVIEW_EVIDENCE_MISSING', `${review.path}:${index + 1} states a verdict without evidence`, {
+        path: review.path,
+        line: index + 1,
+      }),
+    )
+  }
   findings.push(...checkEvidence(root, review))
 
   return { stage: 'review', pass: !findings.some((item) => item.severity === 'error'), findings, checked }
 }
 
 /**
+ * The acceptance stage as a composite gate: the acceptance check plus the
+ * review check, with the acceptance findings first.
+ *
+ * The stage name stays `accept`: review has no place in the state machine, so
+ * it cannot be skipped by not running a separate stage.
+ */
+function acceptStage(root: string, config: GateConfig): GateResult {
+  const acceptance = acceptGate(root, config)
+  const review = reviewGate(root, config)
+  const findings = [...acceptance.findings, ...review.findings]
+  const checked = [...new Set([...acceptance.checked, ...review.checked])]
+  return { stage: 'accept', pass: !findings.some((item) => item.severity === 'error'), findings, checked }
+}
+
+/**
  * Run the gate for `stage`.
  *
  * `review` is a fifth check that shares the acceptance stage's blocking rule;
- * call it through {@link runReview} so the two do not collide.
+ * call it through {@link runReview} when it runs on its own.
  *
  * @param stage - Stage to judge.
  * @param root - Absolute gate root.
@@ -336,7 +487,7 @@ export function runGate(stage: GatedStage, root: string, config?: GateConfig): G
     case 'test':
       return testGate(absolute, resolved)
     case 'accept':
-      return acceptGate(absolute, resolved)
+      return acceptStage(absolute, resolved)
   }
 }
 

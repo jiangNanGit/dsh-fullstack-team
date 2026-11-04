@@ -153,7 +153,8 @@ describe('plugin', () => {
   })
 
   it('refuses an allowlist that names a skill the machine does not have', () => {
-    expect(() => register({ include: ['dev-orchestrator'] })).toThrow(/no skills to advertise/u)
+    expect(() => register({ include: ['dev-orchestrator'] })).toThrow(/dev-orchestrator/u)
+    expect(() => register({ include: ['dev-orchestrator'] })).toThrow(/dsh-fullstack-team:/u)
   })
 })
 
@@ -176,6 +177,38 @@ describe('rebaseResourcePaths', () => {
   it('leaves ordinary prose alone', () => {
     const text = 'See the scripts directory.'
     expect(rebaseResourcePaths(text, 'impeccable', '/opt/bundle/skills/')).toBe(text)
+  })
+
+  it('covers the plural harness pool prefix', () => {
+    expect(rebaseResourcePaths('`.agents/skills/x/a.js`', 'x', '/opt/bundle/skills')).toBe(
+      '`/opt/bundle/skills/x/a.js`',
+    )
+  })
+
+  it('covers every product layout prefix', () => {
+    const body = '`.agent/skills/x/a` `.agents/skills/x/b` `.dsh/skills/x/c` `.claude/skills/x/d`'
+    const rebased = rebaseResourcePaths(body, 'x', '/opt/bundle/skills')
+    expect(rebased).toBe(
+      '`/opt/bundle/skills/x/a` `/opt/bundle/skills/x/b` `/opt/bundle/skills/x/c` `/opt/bundle/skills/x/d`',
+    )
+  })
+
+  it('rewrites a bare scripts citation only when the skill owns one', () => {
+    const body = 'run `scripts/draw.mjs`'
+    expect(rebaseResourcePaths(body, 'taste', '/opt/pack', { ownScripts: true })).toBe(
+      'run `/opt/pack/taste/scripts/draw.mjs`',
+    )
+    expect(rebaseResourcePaths(body, 'taste', '/opt/pack')).toBe(body)
+  })
+
+  it('leaves a bare scripts citation that is already a path alone', () => {
+    const body = '`node_modules/scripts/a.mjs` `~/scripts/a.mjs` `a/scripts/b`'
+    expect(rebaseResourcePaths(body, 'taste', '/opt/pack', { ownScripts: true })).toBe(body)
+  })
+
+  it('is idempotent, including the bare scripts rule', () => {
+    const once = rebaseResourcePaths('`.agent/skills/x/a` `scripts/b`', 'x', '/opt/pack', { ownScripts: true })
+    expect(rebaseResourcePaths(once, 'x', '/opt/pack', { ownScripts: true })).toBe(once)
   })
 
   it('fixes citations in a skill’s real body', () => {

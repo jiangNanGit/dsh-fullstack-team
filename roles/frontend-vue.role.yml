@@ -2,9 +2,9 @@ id: frontend-vue
 name: 全栈研发团队 · 前端开发（Web）
 description: 按冻结契约实现 Web 前端；带 UI 能力闸与配色治理。
 kind: stack
+# 组内 AND、组间 OR：两个标记必须在同一组，单凭 package.json 不算 Vue。
 detect:
-  - package.json
-  - vite.config.ts
+  - [package.json, vite.config.ts]
 include:
   - role-init
   - dev-orchestrator

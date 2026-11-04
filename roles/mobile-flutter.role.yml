@@ -9,6 +9,7 @@ include:
   - dev-orchestrator
   - impeccable
   - ui-theme-governance
+  - acceptance-guard
 contract:
   input: design.md + 契约 + 设计稿
   output: Flutter 实现与走查截图

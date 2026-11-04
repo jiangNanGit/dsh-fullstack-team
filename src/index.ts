@@ -18,7 +18,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { resolve } from 'node:path'
+import { join, posix, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import z from '@deepseek-ai/schemastery'
 import { discoverSkills, parseSkill, rebaseResourcePaths, type SkillCandidate } from './catalog'
@@ -44,6 +44,8 @@ export const Config = z.object({
       dir: z.string().min(1),
       include: z.array(z.string().min(1)),
       exclude: z.array(z.string().min(1)),
+      /** Escape hatch quoted when the pack is absent; no default, so absence stays visible. */
+      hint: z.string(),
     }),
   ),
 })
@@ -145,12 +147,54 @@ function packSkills(pack: PackConfig, provider: string): SkillCandidate[] {
 }
 
 /**
+ * Directory holding every skill of the package that owns a candidate.
+ *
+ * `resourceBase` points at the skill's own directory, so its parent is the
+ * skills root of whichever package shipped it — `<pkg>/skills` for a bundled
+ * skill, `<pack>` for a pack skill (or `<pack>/skills` for a three-level
+ * layout). Rebasing with the bundle's own root for every candidate is what
+ * rewrote a pack citation into a path that does not exist.
+ *
+ * @param candidate - Candidate whose body is being loaded.
+ * @param fallback - Root to use when the candidate carries no usable base.
+ * @returns A skills root, without a trailing separator.
+ */
+function rebaseRoot(candidate: SkillCandidate, fallback: string): string {
+  const base = candidate.resourceBase
+  if (base === undefined || base.kind !== 'directory' || typeof base.path !== 'string') return fallback
+  const parent = posix.dirname(base.path)
+  if (parent === '' || parent === '.' || parent === base.path) return fallback
+  return parent
+}
+
+/**
+ * Whether a skill owns a `scripts/` directory of its own.
+ *
+ * This decides if a bare `scripts/x` citation inside its body is a self
+ * reference (rewrite it) or a package-root reference (leave it alone).
+ *
+ * @param candidate - Candidate being loaded.
+ * @returns Whether `<skill dir>/scripts` is a directory.
+ */
+function hasOwnScripts(candidate: SkillCandidate): boolean {
+  const base = candidate.resourceBase
+  if (base === undefined || base.kind !== 'directory' || typeof base.path !== 'string') return false
+  try {
+    return statSync(join(base.path, 'scripts')).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+/**
  * Register the bundle's skills and tools.
  *
  * @param ctx - Context carrying the skill and tool registries.
  * @param config - Optional provider name, name filters, and tool switch.
  * @throws When the bundle ships no matching skill, which would mean a broken
- *   installation rather than an empty profile.
+ *   installation rather than an empty profile; or when `include` names a skill
+ *   no source provides, which would otherwise mount a role that silently lacks
+ *   a capability it was hired for.
  */
 export function apply(ctx: DevflowContext, config: DevflowConfig = {}): void {
   const providerName = config.providerName ?? 'dsh-fullstack-team'
@@ -186,6 +230,21 @@ export function apply(ctx: DevflowContext, config: DevflowConfig = {}): void {
     }
   }
 
+  // The allowlist is a promise to the role, so it is checked after the packs
+  // have contributed: a name no source provides used to be dropped in silence,
+  // which mounted a role that did not know what it was missing.
+  const advertised = [...new Set(candidates.map((candidate) => candidate.name))].sort()
+  const missing = [...new Set(config.include ?? [])].filter((name) => !advertised.includes(name)).sort()
+  if (missing.length > 0) {
+    const quoted = missing.map((name) => `"${name}"`).join(', ')
+    throw new Error(
+      `dsh-fullstack-team: provider "${providerName}" was told to include ${quoted}, but no source provides ` +
+        `${missing.length === 1 ? 'it' : 'them'}. Visible skills: ${advertised.join(', ') || '(none)'}. ` +
+        `Fix the spelling, declare the pack that provides the missing ${missing.length === 1 ? 'name' : 'names'}, ` +
+        'or drop the role.',
+    )
+  }
+
   if (candidates.length === 0) {
     throw new Error(`dsh-fullstack-team: no skills to advertise under ${skillDir}`)
   }
@@ -197,7 +256,12 @@ export function apply(ctx: DevflowContext, config: DevflowConfig = {}): void {
     async get(candidate, options) {
       const { rank: _rank, locator, ...summary } = candidate
       const skill = parseSkill(await readFile(locator, { encoding: 'utf8', signal: options.signal }), locator)
-      return { ...summary, content: rebaseResourcePaths(skill.content, candidate.name, skillDir) }
+      return {
+        ...summary,
+        content: rebaseResourcePaths(skill.content, candidate.name, rebaseRoot(candidate, skillDir), {
+          ownScripts: hasOwnScripts(candidate),
+        }),
+      }
     },
   }
 

@@ -3,7 +3,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { loadRoles, planRoles, renderPrefix, renderRoleEntry, renderRolesPatch, type RoleManifest } from '../src/roles'
+import {
+  checkRoleIncludes,
+  loadRoles,
+  planRoles,
+  renderPrefix,
+  renderRoleEntry,
+  renderRolesPatch,
+  roleMatches,
+  skillNames,
+  type RoleManifest,
+} from '../src/roles'
 
 const repository = fileURLToPath(new URL('../', import.meta.url))
 const temporary: string[] = []
@@ -36,6 +46,7 @@ describe('loadRoles', () => {
       'pm',
       'qa',
       'backend-java',
+      'dsh-plugin-dev',
       'frontend-vue',
       'mobile-flutter',
     ])
@@ -69,6 +80,136 @@ describe('loadRoles', () => {
     const dir = scratch()
     writeFileSync(join(dir, 'bad.role.yml'), 'id: x\nname: X\n', 'utf8')
     expect(() => loadRoles(dir)).toThrow(/no include list/u)
+  })
+
+  it('rejects a manifest that tries to exclude built-in skills', () => {
+    const dir = scratch()
+    writeFileSync(join(dir, 'bad.role.yml'), 'id: x\nname: X\ninclude: [role-init]\nexclude: [role-init]\n', 'utf8')
+    expect(() => loadRoles(dir)).toThrow(/bad\.role\.yml/u)
+    expect(() => loadRoles(dir)).toThrow(/exclude/u)
+    expect(() => loadRoles(dir)).toThrow(/shared core/u)
+  })
+
+  it('ships no manifest that declares exclude', () => {
+    for (const entry of loadRoles(join(repository, 'roles'))) {
+      expect(Object.hasOwn(entry, 'exclude')).toBe(false)
+    }
+  })
+})
+
+describe('roleMatches', () => {
+  const roles = loadRoles(join(repository, 'roles'))
+  const find = (id: string): RoleManifest => {
+    const found = roles.find((item) => item.id === id)
+    if (found === undefined) throw new Error(`shipped roles have no "${id}"`)
+    return found
+  }
+
+  it('selects dsh-plugin-dev for this repository', () => {
+    const markers = new Set(['cordis.patch.yml', 'tsdown.config.ts', 'package.json'])
+    expect(roleMatches(find('dsh-plugin-dev'), markers)).toBe(true)
+    expect(roleMatches(find('frontend-vue'), markers)).toBe(false)
+  })
+
+  it('requires both dsh-plugin-dev markers: the pair is one group', () => {
+    expect(roleMatches(find('dsh-plugin-dev'), new Set(['cordis.patch.yml']))).toBe(false)
+    expect(roleMatches(find('dsh-plugin-dev'), new Set(['tsdown.config.ts']))).toBe(false)
+    expect(roleMatches(find('dsh-plugin-dev'), new Set(['cordis.patch.yml', 'tsdown.config.ts']))).toBe(true)
+  })
+
+  it('selects backend-java on any one build file: OR between single-marker groups', () => {
+    expect(roleMatches(find('backend-java'), new Set(['pom.xml']))).toBe(true)
+    expect(roleMatches(find('backend-java'), new Set(['build.gradle']))).toBe(true)
+    expect(roleMatches(find('backend-java'), new Set(['build.gradle.kts']))).toBe(true)
+    expect(roleMatches(find('backend-java'), new Set())).toBe(false)
+  })
+
+  it('requires the vue markers together: package.json alone does not select frontend-vue', () => {
+    const onlyPackage = new Set(['package.json'])
+    expect(roleMatches(find('frontend-vue'), onlyPackage)).toBe(false)
+    expect(roleMatches(find('frontend-vue'), new Set(['vite.config.ts']))).toBe(false)
+    expect(roleMatches(find('frontend-vue'), new Set(['package.json', 'vite.config.ts']))).toBe(true)
+  })
+
+  it('mounts core roles even when the repository has no markers', () => {
+    for (const id of ['pm', 'backend-design', 'qa', 'ops']) {
+      expect(roleMatches(find(id), new Set())).toBe(true)
+    }
+  })
+
+  it('never mounts a stack role whose detect is empty', () => {
+    expect(roleMatches(role({ detect: [] }), new Set(['package.json', 'vite.config.ts']))).toBe(false)
+    expect(roleMatches(role(), new Set(['package.json']))).toBe(false)
+  })
+
+  it('reads a list as AND inside a group and OR between groups', () => {
+    expect(roleMatches(role({ detect: [['a', 'b']] }), new Set(['a']))).toBe(false)
+    expect(roleMatches(role({ detect: [['a', 'b']] }), new Set(['a', 'b']))).toBe(true)
+    expect(roleMatches(role({ detect: [['a', 'b'], 'c'] }), new Set(['c']))).toBe(true)
+    expect(roleMatches(role({ detect: [['a', 'b'], 'c'] }), new Set(['a', 'b']))).toBe(true)
+  })
+
+  it('ships the manifests with the corrected detect groups', () => {
+    expect(find('backend-java').detect).toEqual(['pom.xml', 'build.gradle', 'build.gradle.kts'])
+    expect(find('frontend-vue').detect).toEqual([['package.json', 'vite.config.ts']])
+    expect(find('dsh-plugin-dev').detect).toEqual([['cordis.patch.yml', 'tsdown.config.ts']])
+    expect(find('mobile-flutter').detect).toEqual(['pubspec.yaml'])
+  })
+
+  it('compares marker names case-sensitively', () => {
+    expect(roleMatches(find('mobile-flutter'), new Set(['pubspec.yaml']))).toBe(true)
+    expect(roleMatches(find('mobile-flutter'), new Set(['Pubspec.yaml']))).toBe(false)
+  })
+})
+
+describe('checkRoleIncludes', () => {
+  it('returns nothing when every name resolves', () => {
+    expect(checkRoleIncludes([role()], ['dev-orchestrator'])).toEqual([])
+  })
+
+  it('reports one entry per role, listing every missing name', () => {
+    const gaps = checkRoleIncludes([role({ include: ['dev-orchestrator', 'one', 'two'] })], ['dev-orchestrator'])
+    expect(gaps).toEqual([{ roleId: 'backend-java', skills: ['one', 'two'] }])
+  })
+
+  it('ignores roles blocked by a missing pack when given the plan', () => {
+    const blocked = role({ packs: [{ name: 'flutter', dir: '/packs/flutter' }], include: ['flutter-widget'] })
+    const plan = planRoles([blocked], () => false)
+    expect(checkRoleIncludes(plan, [])).toEqual([])
+  })
+
+  it('accepts a name a present pack provides', () => {
+    const mounted = role({ packs: [{ name: 'flutter', dir: '/packs/flutter' }], include: ['flutter-widget'] })
+    const plan = planRoles([mounted], () => true)
+    expect(checkRoleIncludes(plan, ['flutter-widget'])).toEqual([])
+  })
+
+  it('reports a name that only a missing pack could have provided', () => {
+    const mounted = role({ packs: [{ name: 'team-core', dir: '/packs/team-core' }], include: ['role-init', 'gone'] })
+    const plan = planRoles([mounted], () => true)
+    expect(checkRoleIncludes(plan, ['role-init'])).toEqual([{ roleId: 'backend-java', skills: ['gone'] }])
+  })
+})
+
+describe('skillNames', () => {
+  it('reads the frontmatter name, falling back to the directory name', () => {
+    const dir = scratch()
+    mkdirSync(join(dir, 'one'), { recursive: true })
+    writeFileSync(join(dir, 'one', 'SKILL.md'), '---\nname: alpha\ndescription: d\n---\n', 'utf8')
+    mkdirSync(join(dir, 'two'), { recursive: true })
+    writeFileSync(join(dir, 'two', 'SKILL.md'), '# no frontmatter\n', 'utf8')
+    expect(skillNames(dir)).toEqual(['alpha', 'two'])
+  })
+
+  it('skips directories without a SKILL.md', () => {
+    const dir = scratch()
+    mkdirSync(join(dir, 'notes'), { recursive: true })
+    writeFileSync(join(dir, 'notes', 'README.md'), 'notes\n', 'utf8')
+    expect(skillNames(dir)).toEqual([])
+  })
+
+  it('treats a missing directory as an empty contribution', () => {
+    expect(skillNames(join(scratch(), 'nope'))).toEqual([])
   })
 })
 

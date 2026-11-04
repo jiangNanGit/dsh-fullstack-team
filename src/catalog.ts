@@ -101,8 +101,30 @@ export function parseSkill(raw: string, path: string): ParsedSkill {
   }
 }
 
-/** Directory prefixes skills use when they cite their own bundled resources. */
-const OWN_RESOURCE_PREFIXES = ['.agent/skills/', '.dsh/skills/', '.claude/skills/'] as const
+/**
+ * Directory prefixes skills use when they cite their own bundled resources.
+ *
+ * `.agent/` is the singular spelling the flow's own skills use, `.agents/` the
+ * plural one the harness pool uses, and `.dsh/`/`.claude/` the product layouts
+ * imported skills were written against.
+ */
+const OWN_RESOURCE_PREFIXES = ['.agent/skills/', '.agents/skills/', '.dsh/skills/', '.claude/skills/'] as const
+
+/** A bare `scripts/…` citation, provided it does not already sit inside a path. */
+const OWN_SCRIPTS = /(?<![\w./~-])scripts\//gu
+
+/** Options accepted by {@link rebaseResourcePaths}. */
+export interface RebaseOptions {
+  /**
+   * Whether the skill owns a `scripts/` directory of its own.
+   *
+   * Only then does a bare `scripts/x` citation mean "next to this SKILL.md";
+   * a bundle skill citing `scripts/roles.mjs` means the package root and must
+   * stay untouched. The caller answers this from the filesystem because this
+   * function stays pure.
+   */
+  ownScripts?: boolean
+}
 
 /**
  * Rewrite a skill's references to its own bundled resources.
@@ -114,17 +136,31 @@ const OWN_RESOURCE_PREFIXES = ['.agent/skills/', '.dsh/skills/', '.claude/skills
  * is, so it rebases the citation to the installed location at load time and the
  * source `SKILL.md` stays untouched.
  *
+ * The target root is not guessed here: the caller derives it from the candidate
+ * that owns the skill (`resourceBase` of a shipped skill is under
+ * `<pkg>/skills`, of a pack skill under `<pack>`), so a pack skill's citation
+ * lands inside the pack rather than inside the bundle.
+ *
  * @param content - Markdown body of the skill.
  * @param skillName - Skill whose resources are being cited.
- * @param skillRoot - Directory holding every shipped skill.
+ * @param skillRoot - Directory holding every skill of that package.
+ * @param options - Whether the skill also owns a `scripts/` directory.
  * @returns The body with citations pointed at the installed copy.
  */
-export function rebaseResourcePaths(content: string, skillName: string, skillRoot: string): string {
+export function rebaseResourcePaths(
+  content: string,
+  skillName: string,
+  skillRoot: string,
+  options: RebaseOptions = {},
+): string {
   const target = `${skillRoot.replace(/[\\/]+$/u, '')}/${skillName}/`
   let result = content
   for (const prefix of OWN_RESOURCE_PREFIXES) {
     result = result.replaceAll(`${prefix}${skillName}/`, target)
   }
+  // Idempotent: the replacement always leaves a `/` in front of `scripts/`, and
+  // the lookbehind refuses to match after one.
+  if (options.ownScripts === true) result = result.replace(OWN_SCRIPTS, `${target}scripts/`)
   return result
 }
 

@@ -11,7 +11,7 @@
  * @module dsh-fullstack-team/roles
  */
 
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 
@@ -37,8 +37,13 @@ export interface RoleManifest {
   description: string
   /** `core` roles exist in every project; `stack` roles depend on the project. */
   kind: 'core' | 'stack'
-  /** Repository markers that make this role worth mounting. */
-  detect?: string[]
+  /**
+   * Repository markers that make this role worth mounting, as groups:
+   * every marker inside one group must be present (AND), and any one group
+   * being satisfied is enough (OR). A bare string is a one-element group, so
+   * the flat list is still the "any of these" spelling.
+   */
+  detect?: (string | string[])[]
   /** Skills from the bundle this role may see. */
   include: string[]
   /** Packs this role depends on. */
@@ -89,6 +94,15 @@ export function loadRoles(dir: string): RoleManifest[] {
     if (!Array.isArray(role.include)) {
       throw new Error(`dsh-fullstack-team: role "${role.id}" has no include list`)
     }
+    // Built-in skills are a shared core: the host merges catalogs by name, so a
+    // preset can shadow a skill but never remove one. Allowing `exclude` here
+    // would sell the operator a hiding that does not happen (docs/002).
+    if (Object.hasOwn(raw, 'exclude')) {
+      throw new Error(
+        `dsh-fullstack-team: ${path} declares "exclude" — a role cannot hide built-in skills ` +
+          '(they are the shared core; see docs/002-role-presets.md). Remove the key and narrow with "include" instead.',
+      )
+    }
     roles.push({
       ...role,
       kind: role.kind === 'stack' ? 'stack' : 'core',
@@ -100,6 +114,39 @@ export function loadRoles(dir: string): RoleManifest[] {
     if (left.kind !== right.kind) return left.kind === 'core' ? -1 : 1
     return left.id.localeCompare(right.id)
   })
+}
+
+/**
+ * Decide whether a role belongs to a repository.
+ *
+ * This is the executable form of the rule `role-init` documents. `detect` is a
+ * list of groups, and the rule is **AND inside a group, OR between groups**: a
+ * role matches when one of its groups is fully present. Two spellings share the
+ * same reading — a bare string is a one-element group, so
+ * `[pom.xml, build.gradle]` means "either build file", while
+ * `[[package.json, vite.config.ts]]` means "both, together".
+ *
+ * The distinction matters in both directions. `package.json` alone is every
+ * Node project, so Vue asks for the pair; three alternative Java build files are
+ * three groups, so a repository holding any one of them is a Java repository.
+ * A stack role that detects nothing is never chosen, and core roles exist
+ * everywhere, so they always match.
+ *
+ * The comparison is case-sensitive and purely in-memory: scanning the
+ * repository is the caller's job, which keeps this testable and keeps the rule
+ * out of the filesystem layer.
+ *
+ * @param role - Role to test.
+ * @param markers - Names of files and directories present at the repository root.
+ * @returns `true` when the role should be mounted for that repository.
+ */
+export function roleMatches(role: RoleManifest, markers: ReadonlySet<string>): boolean {
+  if (role.kind === 'core') return true
+  const detect = role.detect ?? []
+  if (detect.length === 0) return false
+  return detect.some((group) =>
+    (Array.isArray(group) ? group : [group]).every((marker) => markers.has(marker)),
+  )
 }
 
 /**
@@ -117,6 +164,78 @@ export function planRoles(roles: readonly RoleManifest[], exists: (dir: string) 
     else plan.blocked.push({ role, missing })
   }
   return plan
+}
+
+/** A role whose `include` names a skill no source provides. */
+export interface RoleIncludeGap {
+  /** Role that would mount without the listed skills. */
+  roleId: string
+  /** Names nothing provides, sorted. */
+  skills: string[]
+}
+
+/**
+ * Check every role's `include` against the skill names actually available.
+ *
+ * This is the offline twin of the provider's startup check: the same rule, so a
+ * manifest that passes here does not fail when a session mounts it. Roles that
+ * are blocked by a missing pack are skipped — a missing pack is reported as
+ * "role not mountable", not as a bad allowlist (pass the plan, not the roles,
+ * to get that behaviour).
+ *
+ * @param input - Declared roles, or a plan so blocked roles are skipped.
+ * @param available - Skill names any source provides (bundle + installed packs).
+ * @returns One entry per role with missing names; empty when every name resolves.
+ */
+export function checkRoleIncludes(
+  input: readonly RoleManifest[] | RolePlan,
+  available: Iterable<string>,
+): RoleIncludeGap[] {
+  const roles = 'enabled' in input ? input.enabled.map(({ role }) => role) : input
+  const known = new Set(available)
+  const gaps: RoleIncludeGap[] = []
+  for (const role of roles) {
+    const missing = [...new Set(role.include.filter((name) => !known.has(name)))].sort()
+    if (missing.length > 0) gaps.push({ roleId: role.id, skills: missing })
+  }
+  return gaps
+}
+
+/** Leading YAML frontmatter block, as the harness writes it. */
+const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u
+
+/**
+ * Names of the skills a directory holds.
+ *
+ * Used by the offline precheck to build the "available" set without depending
+ * on the plugin runtime: a directory counts when it holds a readable
+ * `SKILL.md`, and the frontmatter `name` wins over the directory name. A
+ * missing directory is an empty contribution, not an error — packs are optional
+ * and their absence is reported by {@link planRoles}.
+ *
+ * @param dir - Absolute path of a skills directory.
+ * @returns Sorted skill names.
+ */
+export function skillNames(dir: string): string[] {
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) return []
+  const names: string[] = []
+  for (const entry of readdirSync(dir).sort()) {
+    if (entry.startsWith('.')) continue
+    let raw: string
+    try {
+      raw = readFileSync(join(dir, entry, 'SKILL.md'), 'utf8')
+    } catch {
+      continue
+    }
+    const block = FRONTMATTER.exec(raw)
+    const parsed = block?.[1] === undefined ? undefined : (parse(block[1]) as unknown)
+    const declared =
+      typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)['name']
+        : undefined
+    names.push(typeof declared === 'string' && declared.length > 0 ? declared : entry)
+  }
+  return names.sort()
 }
 
 /**

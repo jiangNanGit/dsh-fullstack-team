@@ -1,0 +1,18 @@
+id: dsh-plugin-dev
+name: 全栈研发团队 · 插件开发（TypeScript）
+description: 按冻结设计实现 DSH bundle / 宿主插件（TypeScript + vitest），不改契约。依赖宿主提供的官方 cordis-plugin-development 能力；本包的 include 只能引用本包技能，引用不到它，环境不提供时按 docs/dev/project-standard.md §8.1 清单执行。
+kind: stack
+# 组内 AND、组间 OR：两个标记必须在同一组，缺一个就不是 DSH 插件仓。
+detect:
+  - [cordis.patch.yml, tsdown.config.ts]
+include:
+  - role-init
+  - dev-orchestrator
+  - requirement-clarify
+  - acceptance-guard
+contract:
+  input: design.md + api-contract.md + 任务书
+  output: 可编译代码、pnpm check 全绿、回填文档
+packs:
+  - name: team-core
+    dir: ~/.dsh/skill-packs/team-core

@@ -14,6 +14,7 @@ import { runGate, runReview } from './gates/stages'
 import type { Finding, Severity } from './gates/types'
 import {
   advance,
+  exhaustedFailures,
   FAILURE_BUDGETS,
   FAILURE_TYPES,
   readState,
@@ -57,6 +58,41 @@ const FINDING_SCHEMA = {
 
 /** Gate names accepted by `devflow_gate`. */
 const GATE_NAMES = ['clarify', 'design', 'test', 'accept', 'review'] as const
+
+/**
+ * Per-value criteria for `devflow_gate`'s `stage` parameter.
+ *
+ * The rules live on the parameter, not in the tool description: a value the
+ * model cannot judge is a value it will guess at.
+ */
+const STAGE_DOC = [
+  'Which gate to run. Each value names what it reads and what fails it.',
+  'clarify — reads `requirement.md` (and `assessment.md` when present); fails when an artifact is missing, is not a file, or is empty, when a `TODO`/`待补`-class placeholder survives, when a declared section has no body, or when no `FP-n` is declared.',
+  'design — reads `design.md` and `api-contract.md`; fails when either artifact is missing, empty, or still drafts (placeholder or empty section), or when an endpoint appears in one and not the other (method-aware: `DELETE /orders` is not `POST /orders`).',
+  'test — reads `requirement.md`, `test-cases.md`, and `test-report.md`; fails when a declared `FP-n` has no test case, when a case names an `FP-n` the requirement never declared, when the case document names no functional point at all, or when the execution report is missing, empty, still a draft, or lacks a configured required section.',
+  'accept — a composite gate: the acceptance check plus the review check, both reported under `accept`. Reads `requirement.md`, `acceptance-report.md`, `ui-acceptance.md` (unless the project config waives it with a reason), and `review-notes.md`. Fails when a declared `FP-n` has no verdict or no `path:line` evidence in the same window, when the verdict count is below the number of functional points, when a `P0` count is still above zero, when the UI artifact is missing and not properly waived, and when the review check fails.',
+  'review — reads `review-notes.md`; fails when the file is missing, when it carries fewer than `reviewMinVerdicts` (default 30) verdicts, when a verdict line has no `path:line` evidence in its own window, or when a cited `file:line` does not resolve inside `root` (a reference that leaves `root` is rejected without being read).',
+].join('\n')
+
+/** Per-value semantics for `devflow_state`'s `action` parameter. */
+const ACTION_DOC = [
+  'What to do with the state. Each value names what it changes and what it returns.',
+  'read — reports the current stage and the rework counters already spent in this stage; never moves the flow. A corrupt state file is an error, not a silent reset.',
+  'advance — re-runs the current stage’s gate and moves to the next stage only when it passes; on failure the stage is unchanged and the gate’s findings come back with `pass: false`. When this stage’s rework budget is exhausted, `advance` is refused even if the gate passes (`REWORK_BUDGET_EXHAUSTED`): report to the user, or `reset` and redo the stage.',
+  'rework — records one rework against the `failure` type and reports `count`, `budget`, and `exhausted`; counters are per stage and are cleared when the flow enters a new stage. Once exhausted the flow must escalate to the user instead of retrying. Requires `failure`.',
+  'reset — returns the flow to `clarify` and clears every rework counter plus the transition history; for a replaced requirement, not a way past a failing gate.',
+].join('\n')
+
+/** Per-value criteria for `devflow_state`'s `failure` parameter. */
+const FAILURE_DOC = [
+  'Failure type, required by `rework`. Each value names the edge that failed; the number is that type’s rework budget before the flow must escalate.',
+  `DESIGN_UNFEASIBLE (${FAILURE_BUDGETS.DESIGN_UNFEASIBLE}) — a developer reports the frozen design cannot be implemented as written.`,
+  `CONTRACT_GAP (${FAILURE_BUDGETS.CONTRACT_GAP}) — the frozen contract is missing an endpoint or a field the implementation needs.`,
+  `CONTRACT_CONFLICT (${FAILURE_BUDGETS.CONTRACT_CONFLICT}) — the two sides read one contract differently: same endpoint, disagreeing request or response.`,
+  `IMPL_MISMATCH (${FAILURE_BUDGETS.IMPL_MISMATCH}) — the code does not match the frozen list: an item missing, an item extra, or an item built to a different contract.`,
+  `TEST_FAIL (${FAILURE_BUDGETS.TEST_FAIL}) — an end-to-end case (frontend → backend → database) fails against the frozen acceptance criteria.`,
+  `ACCEPT_P0 (${FAILURE_BUDGETS.ACCEPT_P0}) — acceptance carries a blocking finding, i.e. a \`P0\` is still open.`,
+].join('\n')
 
 /** Project one finding for the tool payload. */
 function wireFinding(item: Finding): WireFinding {
@@ -109,18 +145,19 @@ export function flowTools() {
   const gate = defineTool({
     name: 'devflow_gate',
     description:
-      'Judge whether one flow stage’s artifacts are fit to be consumed by the next stage, and report typed findings. Reads files under `root` only; never writes. `clarify` checks the requirement freeze (functional points declared, no placeholders, no empty sections). `design` checks the design and its API contract agree on every endpoint. `test` checks test cases cover every declared functional point and add none. `accept` checks the acceptance report verdicts every functional point and leaves no P0 open. `review` checks the review checklist was executed: enough verdicts, and every cited file:line exists.',
+      'Judge whether one flow stage’s artifacts are fit to be consumed by the next stage, and report typed findings. Reads files under `root` only; never writes. Which artifacts a stage reads, and what fails it, is stated on the `stage` parameter.',
     parameters: {
       stage: {
         type: 'string',
         required: true,
         enum: [...GATE_NAMES],
-        description: 'Stage to judge.',
+        description: STAGE_DOC,
       },
       root: {
         type: 'string',
         required: true,
-        description: 'Absolute path of the requirement directory that holds the artifacts.',
+        description:
+          'Absolute path of the requirement directory that holds the artifacts. It must be absolute: a relative path is rejected, and files outside it are never read.',
       },
     },
     output: {
@@ -152,23 +189,24 @@ export function flowTools() {
   const state = defineTool({
     name: 'devflow_state',
     description:
-      'Read or move the durable flow state for one requirement directory. `read` reports the current stage and rework counters. `advance` re-runs the current stage’s gate and only moves when it passes — a failing gate leaves the stage unchanged and returns its findings. `rework` records one rework against a typed failure and reports the remaining budget; when the budget is exhausted the flow must escalate to the user instead of retrying. `reset` returns the flow to the first stage.',
+      'Read or move the durable flow state for one requirement directory. The state lives at `<root>/.dsh/devflow/state.json`, so a restart or a new session cannot lose it; a move is only ever granted by a passing gate. Each action’s effect is stated on the `action` parameter.',
     parameters: {
       action: {
         type: 'string',
         required: true,
         enum: ['read', 'advance', 'rework', 'reset'],
-        description: 'What to do with the state.',
+        description: ACTION_DOC,
       },
       root: {
         type: 'string',
         required: true,
-        description: 'Absolute path of the requirement directory that holds the artifacts.',
+        description:
+          'Absolute path of the requirement directory that holds the artifacts. It must be absolute: a relative path is rejected, and files outside it are never read.',
       },
       failure: {
         type: 'string',
         enum: [...FAILURE_TYPES],
-        description: 'Failure type, required for `rework`.',
+        description: FAILURE_DOC,
       },
       note: {
         type: 'string',
@@ -212,18 +250,28 @@ export function flowTools() {
     }) {
       switch (args.action) {
         case 'read': {
-          const { state: current } = readState(args.root)
-          const spent = FAILURE_TYPES.filter((type) => current.rework[type] > 0).map(
-            (type) => `${type}=${current.rework[type]}/${FAILURE_BUDGETS[type]}`,
-          )
+          const { state: current, unknownFailures } = readState(args.root)
+          const inStage = current.reworkStage === current.stage
+          const spent = inStage
+            ? FAILURE_TYPES.filter((type) => current.rework[type] > 0).map(
+                (type) => `${type}=${current.rework[type]}/${FAILURE_BUDGETS[type]}`,
+              )
+            : []
+          const exhausted = exhaustedFailures(current)
+          const parts = [`stage ${current.stage}`]
+          parts.push(spent.length === 0 ? 'no rework recorded in this stage' : spent.join(', '))
+          if (exhausted.length > 0) {
+            const detail = exhausted.map((item) => `${item.type}=${item.count}/${item.budget}`).join(', ')
+            parts.push(`budget exhausted (${detail}) — escalate to the user（需上报）; advance is refused until reset`)
+          }
+          if (unknownFailures.length > 0) {
+            parts.push(`unknown failure type(s) in state, ignored: ${unknownFailures.join(', ')}`)
+          }
           return Promise.resolve({
             stage: current.stage,
             advanced: false,
             pass: true,
-            message:
-              spent.length === 0
-                ? `stage ${current.stage}; no rework recorded`
-                : `stage ${current.stage}; ${spent.join(', ')}`,
+            message: parts.join('; '),
             findings: [],
           })
         }

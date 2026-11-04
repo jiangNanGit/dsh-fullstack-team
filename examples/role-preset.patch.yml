@@ -1,5 +1,5 @@
 # Role preset example for dsh-fullstack-team: the standard preset with the flow plugin
-# hard-bound to one role. Copy this file, change `id`, `name`, and `include`.
+# hard-bound to one role. Copy this file, change `id`, `name`, `include`, and `packs`.
 #
 - insert:
     - id: preset-fullstack-team-backend
@@ -129,14 +129,22 @@
             name: '@deepseek-ai/dsh-plugin-market/tools'
             disabled: true
           # The only line that makes this a devflow role: the flow plugin with an
-          # allowlist. A role sees exactly these skills and nothing else.
+          # allowlist plus the pack that backs the listed skills. The bundle's own
+          # skill (role-init) stays visible as a shared core; the listed pack skills
+          # are the ones this role can actually see.
           - id: dsh-fullstack-team
             name: dsh-fullstack-team
             config:
-              providerName: dsh-fullstack-team-backend
+              providerName: dsh-fullstack-team
               include:
                 - dev-orchestrator
                 - requirement-clarify
                 - acceptance-guard
                 - ops-runbook
+              # Every non-shipped name above must come from a declared, installed
+              # pack. team-core is provisioned separately; a missing pack is a
+              # startup error naming the directory it expected.
+              packs:
+                - name: team-core
+                  dir: ~/.dsh/skill-packs/team-core
               tools: true

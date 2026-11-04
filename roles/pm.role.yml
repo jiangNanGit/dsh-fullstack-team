@@ -7,6 +7,8 @@ include:
   - dev-orchestrator
   - requirement-clarify
   - acceptance-guard
+  - impeccable
+  - taste
   - error-triage
   - ops-runbook
   - yunxiao-projex-ops
