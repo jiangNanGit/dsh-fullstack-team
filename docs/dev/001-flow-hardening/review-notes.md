@@ -62,6 +62,6 @@
 
 审查收口，无阻断项（见 test-report.md:131）。三点保留意见，均已在需求档与测试报告中登记，不影响本次验收：
 
-1. `docs/001-design.md` §4.1–4.3（权限矩阵、只读账号、生产令牌）与 §9 P4 度量依赖实体账号，属未实现范围，已在文中显式标注。
+1. `docs/001-design.md` §4.1–4.3 已改标「本仓不适用」（本仓无数据库/服务器/发布令牌），本仓对等约束见 `docs/dev/project-standard.md` §8.3；§9 P4 度量仍未实现。
 2. 真机 `plugin_manager install_bundle` 安装与重启后预设生效未在本机验证，记为 SKIP（test-report.md:123），需重启后人工复验。
 3. 本会话内 `devflow_gate` 工具运行的是修复前的构建（模块缓存），门禁结论以 `lib/` 真实现为准（test-report.md:124）。
