@@ -14,6 +14,7 @@ The skills are the ones already running in production on a real workspace for th
 | Skill | Role in the flow |
 |---|---|
 | `dev-orchestrator` | The entry router: decides which flow a request belongs to, splits work across agents, owns review and adjudication |
+| `role-init` | 角色初始化：识别仓库技术栈、装配对应角色、缺技能时按「预置→搜索→安装→上报」处理 |
 | `requirement-clarify` | Gate 1 — requirement freeze:原文转录, purpose feasibility, state machine, granularity split |
 | `acceptance-guard` | Gate 5 — whole-flow acceptance: multi-role × real business loop, never single-point checks |
 | `ops-runbook` | Deploy, logs, incident handling, production read-only investigation |
@@ -64,6 +65,8 @@ See [`docs/003-tools.md`](docs/003-tools.md) for the finding codes, failure budg
 ## Roles
 
 A role is a preset whose `dsh-fullstack-team` entry carries an `include` allowlist, so the role only ever sees its own kit. [`examples/role-preset.patch.yml`](examples/role-preset.patch.yml) is a complete copyable preset; [`docs/002-role-presets.md`](docs/002-role-presets.md) has the suggested kits per role.
+
+Roles are **data, not code**: `roles/*.role.yml` declares each role's skills, the repository markers that call for it, and the packs it depends on. `node scripts/roles.mjs --write` turns those manifests into `presets/roles.patch.yml` against the upstream standard preset, so an upstream upgrade is a regeneration rather than a merge.
 
 A role can also **depend on a skill pack** that is provisioned separately — the Flutter engineer loads the Flutter pack, and nobody else does. A declared pack that is not installed is a startup error, not a role that quietly runs without the capability it was hired for. See [`examples/role-preset-flutter.patch.yml`](examples/role-preset-flutter.patch.yml) and [`docs/004-skill-packs.md`](docs/004-skill-packs.md).
 

@@ -1,12 +1,32 @@
 # Role presets — hard-binding skills to one role
 
+## Roles are data
+
+A role lives in `roles/<id>.role.yml`:
+
+```yaml
+id: mobile-flutter
+kind: stack                     # core roles ship everywhere; stack roles follow the project
+detect: [pubspec.yaml]          # markers that call for this role
+include: [dev-orchestrator, impeccable, ui-theme-governance]
+packs:
+  - name: flutter
+    dir: ~/.dsh/skill-packs/flutter
+    hint: 把官方 Flutter skill 包解到该目录
+```
+
+`node scripts/roles.mjs` reports which roles can mount and which are blocked by a missing pack; `--write` emits `presets/roles.patch.yml`. The preset body comes from `templates/preset.template.yml` — one copy of the upstream standard preset, four tokens per role. Upgrading DSH means updating that one template, not six presets.
+
+A blocked role is not mounted at all. That is the point: a Flutter engineer without the Flutter pack would guess, and a guess costs more than a missing menu entry.
+
+
 A role is a preset whose `dsh-fullstack-team` entry carries an `include` allowlist. That is the whole mechanism: the preset's own skill registry only ever hears about the listed skills, so "did this agent load the right skill?" stops being a question — the others do not exist in its session.
 
 ## The shape
 
 ```yaml
 - insert:
-    - id: preset-devflow-backend
+    - id: preset-fullstack-team-backend
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: devflow-backend

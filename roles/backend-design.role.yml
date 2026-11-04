@@ -1,0 +1,7 @@
+id: backend-design
+name: 全栈研发团队 · 后端设计
+description: 接口、模块、表结构、状态机；只产出文档，不写实现。
+kind: core
+include:
+  - dev-orchestrator
+  - requirement-clarify

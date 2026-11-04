@@ -1,0 +1,13 @@
+id: pm
+name: 全栈研发团队 · 主 PM
+description: 全流程设计、派活、裁决、验收与提交；不写业务代码。
+kind: core
+include:
+  - dev-orchestrator
+  - requirement-clarify
+  - acceptance-guard
+  - error-triage
+  - ops-runbook
+  - yunxiao-projex-ops
+  - ui-theme-governance
+delegates: true

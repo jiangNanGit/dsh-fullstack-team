@@ -1,0 +1,8 @@
+id: qa
+name: 全栈研发团队 · 测试
+description: 端到端验收，前端到后端到数据库的数据核对，不做单点验证。
+kind: core
+include:
+  - dev-orchestrator
+  - acceptance-guard
+  - error-triage

@@ -16,6 +16,7 @@ const EXPECTED = [
   'impeccable',
   'ops-runbook',
   'requirement-clarify',
+  'role-init',
   'taste',
   'ui-theme-governance',
   'yunxiao-projex-ops',

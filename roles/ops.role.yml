@@ -1,0 +1,9 @@
+id: ops
+name: 全栈研发团队 · 运维
+description: 发版、日志定位、线上只读排查与事故处置。
+kind: core
+include:
+  - ops-runbook
+  - error-triage
+  - yunxiao-projex-ops
+  - acceptance-guard

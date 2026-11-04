@@ -73,6 +73,8 @@ export interface PackConfig {
   include?: string[]
   /** Optional denylist scoped to this pack. */
   exclude?: string[]
+  /** What to do when the pack is absent. */
+  hint?: string
 }
 
 /** The slice of the skill registry this plugin uses. */
@@ -133,7 +135,7 @@ function packSkills(pack: PackConfig, provider: string): SkillCandidate[] {
   if (!existsSync(directory) || !statSync(directory).isDirectory()) {
     throw new Error(
       `dsh-fullstack-team: skill pack "${pack.name}" is not installed — expected a directory at ${directory}. ` +
-        'Install the pack, or drop this role.',
+        (pack.hint === undefined ? 'Install the pack, or drop this role.' : `${pack.hint} (or drop this role)`),
     )
   }
   return discoverSkills(directory, {

@@ -2,10 +2,10 @@
 # hard-bound to one role. Copy this file, change `id`, `name`, and `include`.
 #
 - insert:
-    - id: preset-devflow-backend
+    - id: preset-fullstack-team-backend
       name: '@deepseek-ai/dsh-agent-preset'
       config:
-        id: devflow-backend
+        id: fullstack-team-backend
         name: dsh-fullstack-team 后端开发
         description: 按冻结契约实现后端代码；只看见流程入口、澄清闸、验收闸与运维手册。
         order: 1

@@ -1,0 +1,13 @@
+id: backend-java
+name: 全栈研发团队 · 后端开发（Java）
+description: 按冻结契约实现 Java 后端；只带流程入口、澄清闸、验收闸与运维手册。
+kind: stack
+detect:
+  - pom.xml
+  - build.gradle
+  - build.gradle.kts
+include:
+  - dev-orchestrator
+  - requirement-clarify
+  - acceptance-guard
+  - ops-runbook

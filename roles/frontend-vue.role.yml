@@ -1,0 +1,12 @@
+id: frontend-vue
+name: 全栈研发团队 · 前端开发（Web）
+description: 按冻结契约实现 Web 前端；带 UI 能力闸与配色治理。
+kind: stack
+detect:
+  - package.json
+  - vite.config.ts
+include:
+  - dev-orchestrator
+  - impeccable
+  - ui-theme-governance
+  - acceptance-guard
