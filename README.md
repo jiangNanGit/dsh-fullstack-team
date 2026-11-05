@@ -49,10 +49,87 @@ node scripts/skill-audit.mjs ~/.dsh/skill-packs/team-core
 
 ## Install
 
-Bundle layers load at profile boot, so installation goes through the host's **`plugin_manager`**, not through hand edits of a profile file:
+One command. It aligns the plugin with the installed host, regenerates and
+merges the role presets, and restarts the host for you:
+
+```bash
+npx dsh-fullstack-team install        # or, from a checkout / unpacked package:
+node scripts/install.mjs
+```
+
+Run it after installing the bundle, and again after every host upgrade. It is
+idempotent: when the profile already holds the presets this version would
+generate, it writes nothing, backs nothing up, restarts nothing, and prints
+`已是最新，无需操作`. A successful run ends with one sentence:
+
+```
+已装好：8 个预设 → 宿主已重启（0.2.2-rc.1）
+```
+
+### What the command does
+
+| Step | What happens |
+|---|---|
+| 1. Probe | Finds the host app and reads its version out of `app.asar`; names the target profile (`~/.dsh/profiles/desktop/cordis.patch.yml` by default) and the plugin version. |
+| 2. Align | Compares `templates/preset.template.yml` with the standard preset the host ships. On drift it **re-derives the template** from the shipped standard, re-runs the same compatibility check, and writes the template back only if that second check passes. Drift that cannot be healed stops the run before anything is touched. |
+| 3. Generate | `roles/*.role.yml` → preset patch, using the same rules as `scripts/roles.mjs`. |
+| 4. Merge | Backs the profile up to `<profile>.bak-YYYYMMDD-HHMMSS`, splices in only the block this plugin owns, re-reads the file and verifies it (ids unique, registry row present, every line outside the block byte-identical). |
+| 5. Restart | Quits and relaunches the macOS app, because a profile patch is only read at boot. |
+
+A failure prints which step failed, which backup was restored (if any), and what
+to do next:
+
+```
+失败：宿主 0.2.3 的预置模板与插件不兼容，且无法自动对齐（persona row 里没有 prefix 行）
+[DRIFT] persona: ...
+  → profile 未改动。把上面的 [DRIFT] 报告交给维护者，或运行 node scripts/check-preset-compat.mjs 看完整报告。
+```
+
+Nothing is ever left half-merged: a failed write or a failed verification restores
+the backup (or removes a profile the run created) before exiting non-zero.
+
+### Flags
+
+| Flag | When to use it |
+|---|---|
+| `--dry-run` | See the plan — probe, alignment, which presets would be added or removed, where the backup would go — without writing, backing up or restarting. Also the way to run on a machine with no host. |
+| `--no-restart` | Install but leave the app alone: CI, debugging, or when you are about to restart by hand anyway. |
+| `--profile <name\|path>` | Target another profile: `--profile web` → `~/.dsh/profiles/web/cordis.patch.yml`, or an explicit file path. |
+| `--source <file>` | Merge an already-generated patch instead of generating (triage). |
+| `--force` | Merge even though the template and the host standard disagree. Only after reading `node scripts/check-preset-compat.mjs` and confirming the drift is harmless. |
+
+Exit codes: `0` installed or already up to date; `1` failed (rolled back);
+`2` bad arguments. A missing host is skipped (`[SKIP]`) only under `--dry-run`,
+`CI`, or `DSH_ALLOW_MISSING_HOST=1` — otherwise it is a failure, because on a real
+macOS machine it means the desktop app is not installed where the command looked.
+`DSH_APP_ASAR` / `DSH_APP_PATH` point it at a non-standard install location.
+
+The same command is available as `pnpm dsh:install` in a source checkout. The
+name is `install` **as an argument**, not as an npm script called `install`,
+because npm runs a script with that name automatically during `npm install`.
+
+### Manual triage (only when the one command fails)
+
+The layers the command drives are still runnable one by one:
+
+```bash
+node scripts/check-preset-compat.mjs                 # what exactly drifted, and why
+node scripts/roles.mjs --write                       # regenerate presets/roles.patch.yml
+node scripts/install-presets.mjs --profile desktop   # merge only, no align/generate/restart
+node scripts/install-presets.mjs --dry-run           # what the merge would change
+```
+
+In a source checkout, run `pnpm install && pnpm build` first: `scripts/roles.mjs`
+and the generator inside `scripts/install.mjs` import `lib/roles.js`.
+
+### Installing the bundle itself
+
+The install command above installs the *presets*. The bundle layer loads at
+profile boot and goes through the host's **`plugin_manager`**, not through hand
+edits of a profile file:
 
 - `install_bundle` with `target` set to the **absolute directory** of this package. It performs the package installation and the bundle selection itself — do not reproduce those steps with shell commands.
-- `list_bundles` / `list_plugins` afterwards to confirm `dsh-fullstack-team` is registered and enabled, then restart the app (or the CLI profile) so the bundle patch is loaded.
+- `list_bundles` / `list_plugins` afterwards to confirm `dsh-fullstack-team` is registered and enabled.
 
 The bundle inserts exactly one plugin, `dsh-fullstack-team`, which advertises the shipped skills. The profile needs **no** skill-directory configuration: the plugin reads `skills/` next to its own `lib/`.
 
@@ -75,7 +152,7 @@ A git-address install has two limits you have to handle yourself:
 
 ### What a release contains
 
-The published package carries `lib/`, `scripts/`, `skills/`, `roles/`, `templates/`, `presets/`, `docs/`, `examples/`, `locale/`, `icon.svg` and `cordis.patch.yml`. It does **not** carry `src/` or `tests/`, so `pnpm test` and `pnpm check` only work in a source checkout. The package-root scripts do work from an installed copy: `node scripts/roles.mjs`, `node scripts/skill-audit.mjs`, `node scripts/check-preset-compat.mjs` and `node scripts/install-presets.mjs`.
+The published package carries `lib/`, `scripts/`, `skills/`, `roles/`, `templates/`, `presets/`, `docs/`, `examples/`, `locale/`, `icon.svg` and `cordis.patch.yml`. It does **not** carry `src/` or `tests/`, so `pnpm test` and `pnpm check` only work in a source checkout. The package-root scripts do work from an installed copy: `node scripts/install.mjs` (the one command), plus `node scripts/roles.mjs`, `node scripts/skill-audit.mjs`, `node scripts/check-preset-compat.mjs` and `node scripts/install-presets.mjs` for manual triage.
 
 ## Configuration
 
@@ -119,7 +196,7 @@ A role is a preset whose `dsh-fullstack-team` entry carries an `include` allowli
 
 Roles are **data, not code**: `roles/*.role.yml` declares each role's skills, the repository markers that call for it, and the packs it depends on. `node scripts/roles.mjs --write` turns those manifests into `presets/roles.patch.yml` against the upstream standard preset, so an upstream upgrade is a regeneration rather than a merge. In an installed package the package directory is read-only, so `node scripts/roles.mjs --out <path>` writes the generated patch wherever the profile lives.
 
-`pnpm presets:install` runs the whole handoff: generate → back up the profile patch → splice only the block this tool owns → re-read and verify → print the restart hint. It is idempotent, refuses duplicate entry ids or a lost `agent-preset-registry`, restores the backup on failure, and takes `--profile <name|path>` / `--dry-run` (`node scripts/install-presets.mjs --dry-run` previews, writing nothing).
+`npx dsh-fullstack-team install` (the [one command](#install)) runs the whole handoff for you. Underneath it, `scripts/install-presets.mjs` does the merge half: generate → back up the profile patch → splice only the block this tool owns → re-read and verify. It is idempotent, refuses duplicate entry ids or a lost `agent-preset-registry`, restores the backup on failure, and takes `--profile <name|path>` / `--dry-run` (`node scripts/install-presets.mjs --dry-run` previews, writing nothing). Use it directly only when triaging a failed one-command run.
 
 A role can also **depend on a skill pack** that is provisioned separately — the Flutter engineer loads the Flutter pack, and nobody else does. A declared pack that is not installed is a startup error, not a role that quietly runs without the capability it was hired for. See [`examples/role-preset-flutter.patch.yml`](examples/role-preset-flutter.patch.yml) and [`docs/004-skill-packs.md`](docs/004-skill-packs.md).
 
@@ -143,10 +220,17 @@ Three principles the design rests on:
 pnpm install
 pnpm check                      # typecheck + tests + skills audit + preset compat + build (source checkout only)
 pnpm audit:skills               # skills/ only; also runs inside pnpm check
-pnpm presets:install            # generate + merge role presets into the profile
-node scripts/install-presets.mjs --dry-run   # preview; --profile <name|path> targets another profile
+pnpm dsh:install                # the one command: align + generate + merge + restart
+node scripts/install.mjs --dry-run           # same, plan only
+node scripts/install.mjs --no-restart        # same, but leave the app alone
+```
+
+Manual triage, when the one command fails:
+
+```bash
 node scripts/check-preset-compat.mjs         # template vs the host's shipped standard preset (exit 1 on drift)
-node scripts/roles.mjs --write  # regenerate presets/roles.patch.yml after a role edit
+node scripts/roles.mjs --write               # regenerate presets/roles.patch.yml after a role edit
+node scripts/install-presets.mjs --profile desktop   # merge only; --profile <name|path>, --dry-run
 ```
 
 ## License

@@ -26,6 +26,9 @@
   },
   "type": "module",
   "main": "lib/index.js",
+  "bin": {
+    "dsh-fullstack-team": "scripts/install.mjs"
+  },
   "exports": {
     ".": "./lib/index.js",
     "./package.json": "./package.json",
@@ -64,6 +67,7 @@
     "check": "pnpm typecheck && pnpm test && pnpm audit:skills && node scripts/check-preset-compat.mjs && pnpm build",
     "prepack": "pnpm build",
     "audit:skills": "node scripts/skill-audit.mjs skills",
+    "dsh:install": "node scripts/install.mjs",
     "presets:install": "node scripts/install-presets.mjs"
   },
   "dependencies": {
