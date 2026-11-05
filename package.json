@@ -61,7 +61,7 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm test && pnpm audit:skills && pnpm build",
+    "check": "pnpm typecheck && pnpm test && pnpm audit:skills && node scripts/check-preset-compat.mjs && pnpm build",
     "prepack": "pnpm build",
     "audit:skills": "node scripts/skill-audit.mjs skills",
     "presets:install": "node scripts/install-presets.mjs"

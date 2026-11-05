@@ -15,8 +15,14 @@
  *   node scripts/install-presets.mjs --profile /tmp/copy/cordis.patch.yml
  *   node scripts/install-presets.mjs --dry-run          # print the plan, write nothing
  *   node scripts/install-presets.mjs --source <file>    # merge an existing patch instead of generating
+ *   node scripts/install-presets.mjs --force            # skip the template-vs-host compatibility gate
  *
  * Safety:
+ * - Before anything is generated or written, the template is compared with the
+ *   standard preset the installed host ships (`check-preset-compat.mjs`). A host
+ *   upgrade can delete a module a frozen template row still points at, and every
+ *   generated preset then fails to load — so drift refuses the merge. `--force`
+ *   skips that gate; run `node scripts/check-preset-compat.mjs` first to see why.
  * - `<file>.bak-YYYYMMDD-HHMMSS` is written before any change; a failure while
  *   verifying restores it (or removes the file we created) and exits non-zero.
  * - Re-running is idempotent: the same input produces the same bytes and no
@@ -24,8 +30,8 @@
  * - The profile is refused when the merged result would have duplicate entry ids
  *   or lose `agent-preset-registry`.
  *
- * Exit codes: 0 done (including "already up to date"); 1 generation/merge/verify
- * failed (changes rolled back); 2 bad arguments.
+ * Exit codes: 0 done (including "already up to date"); 1 generation/merge/verify/
+ * compatibility failed (changes rolled back); 2 bad arguments.
  *
  * @module dsh-fullstack-team/scripts/install-presets
  */
@@ -44,6 +50,7 @@ import {
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { checkPresetCompat, formatDrifts } from './check-preset-compat.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '..')
@@ -55,14 +62,15 @@ const PRESET_ID = /^preset-[\w.-]+$/u
 const DEFAULT_PROFILE = join(homedir(), '.dsh', 'profiles', 'desktop', 'cordis.patch.yml')
 
 const USAGE = `用法：
-  node scripts/install-presets.mjs [--profile <名字|路径>] [--dry-run] [--source <生成物>]
+  node scripts/install-presets.mjs [--profile <名字|路径>] [--dry-run] [--source <生成物>] [--force]
 
   --profile <名字>   装进 ~/.dsh/profiles/<名字>/cordis.patch.yml（默认 desktop）
   --profile <路径>   装进指定文件（相对路径按当前目录解析，支持 ~/）
-  --dry-run          只打印将发生的变更，不写盘、不备份
+  --dry-run          只打印将发生的变更，不写盘、不备份（仍会报告兼容状态）
   --source <文件>    直接合并该生成物（跳过现场生成；调试用）
+  --force            跳过模板与宿主 standard 的兼容检查（确认无风险才用）
 
-退出码：0 成功（含“已是最新”）；1 生成/合并/校验失败（已回滚）；2 参数错误`
+退出码：0 成功（含“已是最新”）；1 生成/合并/校验/兼容检查失败（已回滚）；2 参数错误`
 
 /** Print usage and exit. */
 function usage(code, reason) {
@@ -94,6 +102,7 @@ if (argv.includes('--help') || argv.includes('-h')) usage(0)
 const profileArg = flagValue(argv, '--profile')
 const sourceArg = flagValue(argv, '--source')
 const dryRun = argv.includes('--dry-run')
+const force = argv.includes('--force')
 if (profileArg === '') usage(2, '--profile 需要一个名字或路径')
 if (sourceArg === '') usage(2, '--source 需要一个文件路径')
 
@@ -101,7 +110,7 @@ if (sourceArg === '') usage(2, '--source 需要一个文件路径')
  * Reject stray arguments while letting a flag value look like anything.
  */
 function checkArguments() {
-  const known = new Set(['--profile', '--source', '--dry-run', '--help', '-h'])
+  const known = new Set(['--profile', '--source', '--dry-run', '--force', '--help', '-h'])
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--profile' || arg === '--source') {
@@ -113,6 +122,50 @@ function checkArguments() {
   }
 }
 checkArguments()
+
+/**
+ * Refuse to merge when the frozen template no longer matches the host's shipped
+ * standard preset.
+ *
+ * The template is a manual copy of upstream's `standard.patch.yml`. An upgrade
+ * can delete a module a row still references, which makes every generated preset
+ * invalid — the merge must stop before it writes such a patch into a profile.
+ * A missing host (CI, non-macOS) is not a failure: the check reports `[SKIP]`.
+ * `--force` skips the gate for an operator who has already read the report.
+ */
+function checkCompatibility() {
+  if (force) {
+    console.log('--force：跳过预置模板兼容检查')
+    return
+  }
+  let report
+  try {
+    report = checkPresetCompat()
+  } catch (error) {
+    console.error(`dsh-fullstack-team: 预置模板兼容检查失败：${error.message}`)
+    process.exit(1)
+  }
+  if (report.status === 'skip') {
+    console.log(`兼容检查  [SKIP] ${report.reason}`)
+    return
+  }
+  if (report.status === 'error') {
+    console.error(`dsh-fullstack-team: 预置模板兼容检查无法完成：${report.reason}`)
+    process.exit(1)
+  }
+  if (report.status === 'drift') {
+    console.error(
+      'dsh-fullstack-team: templates/preset.template.yml 与当前宿主的 standard 预置不一致，拒绝合并 profile。',
+    )
+    for (const line of formatDrifts(report.drifts)) console.error(line)
+    console.error('\n宿主已升级，先跑 node scripts/check-preset-compat.mjs 按报告校准模板；确认无风险后可加 --force 跳过。')
+    process.exit(1)
+  }
+  console.log(
+    `兼容检查  [OK] 模板 ${report.rows.template} 个插件 row 与宿主 standard 一致（standard ${report.standardLines} 行）`,
+  )
+}
+checkCompatibility()
 
 /**
  * Resolve the target profile file.

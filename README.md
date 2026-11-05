@@ -75,7 +75,7 @@ A git-address install has two limits you have to handle yourself:
 
 ### What a release contains
 
-The published package carries `lib/`, `scripts/`, `skills/`, `roles/`, `templates/`, `presets/`, `docs/`, `examples/`, `locale/`, `icon.svg` and `cordis.patch.yml`. It does **not** carry `src/` or `tests/`, so `pnpm test` and `pnpm check` only work in a source checkout. The package-root scripts do work from an installed copy: `node scripts/roles.mjs`, `node scripts/skill-audit.mjs` and `node scripts/install-presets.mjs`.
+The published package carries `lib/`, `scripts/`, `skills/`, `roles/`, `templates/`, `presets/`, `docs/`, `examples/`, `locale/`, `icon.svg` and `cordis.patch.yml`. It does **not** carry `src/` or `tests/`, so `pnpm test` and `pnpm check` only work in a source checkout. The package-root scripts do work from an installed copy: `node scripts/roles.mjs`, `node scripts/skill-audit.mjs`, `node scripts/check-preset-compat.mjs` and `node scripts/install-presets.mjs`.
 
 ## Configuration
 
@@ -141,10 +141,11 @@ Three principles the design rests on:
 
 ```bash
 pnpm install
-pnpm check                      # typecheck + tests + skills audit + build (source checkout only)
+pnpm check                      # typecheck + tests + skills audit + preset compat + build (source checkout only)
 pnpm audit:skills               # skills/ only; also runs inside pnpm check
 pnpm presets:install            # generate + merge role presets into the profile
 node scripts/install-presets.mjs --dry-run   # preview; --profile <name|path> targets another profile
+node scripts/check-preset-compat.mjs         # template vs the host's shipped standard preset (exit 1 on drift)
 node scripts/roles.mjs --write  # regenerate presets/roles.patch.yml after a role edit
 ```
 

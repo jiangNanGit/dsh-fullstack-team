@@ -372,7 +372,7 @@ export function renderRolesPatch(template: string, plan: RolePlan): string {
       .replace(/^        order: \d+$/mu, `        order: ${index + 1}`)
 
     if (role.delegates === true && dispatchable.length > 0) {
-      const anchor = `${' '.repeat(18)}modelSelectionSettings: true`
+      const anchor = `${' '.repeat(18)}modelSelection: true`
       const allow = [
         `${' '.repeat(18)}allowedAgentPresets:`,
         ...dispatchable.map((id) => `${' '.repeat(20)}- ${id}`),
