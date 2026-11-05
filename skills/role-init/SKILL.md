@@ -17,7 +17,7 @@ description: 角色初始化与角色创造规程——主智能体接手一个�
 | `package.json` + `vite.config.*`（同一组，两个都要在） | `frontend-vue` |
 | `pubspec.yaml` | `mobile-flutter` |
 
-`detect` 的判定语义是**组内 AND、组间 OR**：`detect` 的每一项是一个「组」，字符串即单元素组；命中条件 = 存在**某一组**，组内每个标记都在仓库根目录里。所以 Java 那行写三个单元素组 = 三选一，Vue 那行把两个标记放进同一组 = 缺一不可（单凭 `package.json` 会把任意 Node 仓误判成 Vue）。
+`detect` 的判定语义是**组内 AND、组间 OR**：`detect` 的每一项是一个「组」，字符串即单元素组；命中条件 = 存在**某一组**，组内每个标记都在仓库根目录里。所以 Java 那行写三个单元素组 = 三选一，Vue 那行把两个标记放进同一组 = 缺一不可（单凭 `package.json` 会把任意 Node 仓误判成 Vue）。标记以 `.*` 结尾时是后缀通配，`.*` 表示**同名任意扩展名**（非空后缀）：`vite.config.*` 命中 `vite.config.js`/`vite.config.mts`/`vite.config.ts`，但前缀必须完整匹配，`vitest.config.ts` 不算；其它写法仍精确匹配，`package.json` 这类带点的普通文件名不会因为带点就变成通配。
 
 **唯一事实来源是本插件 `roles/*.role.yml` 的 `detect` 字段**，表只是给人看的速查。manifest 新增角色，本 skill 无需修改。判定规则的代码落点是 `src/roles.ts` 的 `roleMatches(role, markers)`；`node scripts/roles.mjs` 输出的「本仓命中」列就是它算的。
 

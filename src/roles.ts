@@ -41,7 +41,10 @@ export interface RoleManifest {
    * Repository markers that make this role worth mounting, as groups:
    * every marker inside one group must be present (AND), and any one group
    * being satisfied is enough (OR). A bare string is a one-element group, so
-   * the flat list is still the "any of these" spelling.
+   * the flat list is still the "any of these" spelling. A marker ending in `.*`
+   * is a suffix wildcard — it matches any file sharing that stem with a
+   * non-empty extension (`vite.config.*` matches `vite.config.js`); every other
+   * marker is an exact file name, dots included (`package.json`).
    */
   detect?: (string | string[])[]
   /** Skills from the bundle this role may see. */
@@ -124,7 +127,14 @@ export function loadRoles(dir: string): RoleManifest[] {
  * role matches when one of its groups is fully present. Two spellings share the
  * same reading — a bare string is a one-element group, so
  * `[pom.xml, build.gradle]` means "either build file", while
- * `[[package.json, vite.config.ts]]` means "both, together".
+ * `[[package.json, vite.config.*]]` means "both, together".
+ *
+ * A marker written as `name.*` is a suffix wildcard: it stands for "that same
+ * name with any non-empty extension", so `vite.config.*` matches
+ * `vite.config.ts`, `vite.config.js` and `vite.config.mts` alike. Every other
+ * marker is an exact file name — the dot in `package.json` is part of the name,
+ * not a wildcard — and the wildcard prefix must match whole: `vite.config.*`
+ * does not accept `vitest.config.ts`.
  *
  * The distinction matters in both directions. `package.json` alone is every
  * Node project, so Vue asks for the pair; three alternative Java build files are
@@ -145,8 +155,35 @@ export function roleMatches(role: RoleManifest, markers: ReadonlySet<string>): b
   const detect = role.detect ?? []
   if (detect.length === 0) return false
   return detect.some((group) =>
-    (Array.isArray(group) ? group : [group]).every((marker) => markers.has(marker)),
+    (Array.isArray(group) ? group : [group]).every((marker) => markerMatches(marker, markers)),
   )
+}
+
+/** Suffix that turns a marker into a wildcard: `vite.config.*` means "vite.config.anything". */
+const WILDCARD = '.*'
+
+/**
+ * Test one marker against the repository's top-level names.
+ *
+ * A marker ending in `.*` is a stem plus "any extension": it matches a name
+ * that starts with the stem (the dot included) and carries at least one more
+ * character — `vite.config.*` accepts `vite.config.js` and `vite.config.mts`,
+ * but not `vite.config.` and not `vitest.config.ts`, whose stem differs. Every
+ * other marker is compared exactly, so ordinary dotted file names such as
+ * `package.json` and `cordis.patch.yml` stay exact matches rather than being
+ * read as wildcards.
+ *
+ * @param marker - One `detect` entry.
+ * @param markers - Names of files and directories present at the repository root.
+ * @returns `true` when the marker is present.
+ */
+function markerMatches(marker: string, markers: ReadonlySet<string>): boolean {
+  if (!marker.endsWith(WILDCARD)) return markers.has(marker)
+  const stem = marker.slice(0, -1)
+  for (const name of markers) {
+    if (name.length > stem.length && name.startsWith(stem)) return true
+  }
+  return false
 }
 
 /**

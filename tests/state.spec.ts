@@ -207,13 +207,18 @@ describe('advance', () => {
     expect(third.rework).toMatchObject({ count: 3, budget: 3, exhausted: true })
     expect(exhaustedFailures(readState(root).state)).toEqual([{ type: 'IMPL_MISMATCH', count: 3, budget: 3 }])
 
-    const before = readFileSync(join(root, STATE_FILE), 'utf8')
+    const before = JSON.parse(readFileSync(join(root, STATE_FILE), 'utf8'))
     const outcome = advance(root)
     expect(outcome).toMatchObject({ advanced: false, pass: false, stage: 'clarify' })
     expect(outcome.findings.map((item) => item.code)).toContain('REWORK_BUDGET_EXHAUSTED')
     expect(outcome.findings[0]?.detail).toContain('IMPL_MISMATCH')
     expect(outcome.message).toContain('reset')
-    expect(readFileSync(join(root, STATE_FILE), 'utf8')).toBe(before)
+    // A refusal is not progress: the stage and the history are untouched. Only
+    // the refusal counter moves, in the same write.
+    const after = JSON.parse(readFileSync(join(root, STATE_FILE), 'utf8'))
+    expect(after.stage).toBe(before.stage)
+    expect(after.history).toEqual(before.history)
+    expect(after.metrics.advanceBlocked.clarify).toBe(1)
   })
 
   it('refuses to advance after a single CONTRACT_CONFLICT rework', () => {

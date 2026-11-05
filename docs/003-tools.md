@@ -28,14 +28,43 @@ Finding codes (all `error` unless noted): `FILE_MISSING`, `FILE_NOT_FILE`, `FILE
 
 ## `devflow_state`
 
-`{ action, root, failure?, note? }` → `{ stage, advanced, pass, message, findings[], rework? }`.
+`{ action, root, failure?, note? }` → `{ stage, advanced, pass, message, findings[], rework?, metrics?, reworkStage? }`.
 
 Stages: `clarify → design → build → test → accept → ship`. The file lives at `<root>/.dsh/devflow/state.json`, so a restart, a compaction, or a new session cannot lose it. `root` must be absolute.
 
 - `read` — current stage and the rework counters spent **in this stage**. A corrupt state file is an error, not a silent reset; unknown failure keys from an older version are listed in the message and ignored.
-- `advance` — re-runs the current stage's gate and moves **only if it passes and the stage's budget is intact**; otherwise the stage is unchanged and findings come back.
+- `metrics` — the cumulative statistics (`advanceBlocked`, `rework`, `codes`, described below) plus the current `stage` and the `reworkStage` the per-stage counters belong to. **Read-only**: it neither moves the flow nor writes the state file.
+- `advance` — re-runs the current stage's gate and moves **only if it passes and the stage's budget is intact**; otherwise the stage is unchanged, findings come back, and the refusal is counted in `metrics` (stage + error-level finding codes).
 - `rework` — records one rework against a typed failure and reports the remaining budget. Counters are per stage and reset when the flow enters a new stage.
-- `reset` — back to `clarify`, clearing counters and history. It is the only mechanical exit from an exhausted stage, and it is not a way to change stage.
+- `reset` — back to `clarify`, clearing counters and history but **keeping the cumulative metrics**. It is the only mechanical exit from an exhausted stage, and it is not a way to change stage.
+
+### Metrics
+
+A refusal that only exists as a message cannot answer "is this month better than the last one?". Every refusal and every rework is therefore counted on disk, in the same write as the rest of the state:
+
+| Counter | Key | Incremented when |
+|---|---|---|
+| `advanceBlocked` | stage name | `advance` is refused in that stage (failing gate or `REWORK_BUDGET_EXHAUSTED`) |
+| `rework` | one of the six failure types | `rework` records that failure type |
+| `codes` | error-level finding `code` | a refused `advance` returns that code as an `error` (a refusal returning three errors bumps three counters) |
+
+`codes` ignores `warning` findings on purpose: `UI_ACCEPTANCE_WAIVED` is emitted on every `accept` run of a waived project, so counting it would leave a constant that says nothing about how often the gate actually blocked anything. A warning that accompanies a failing gate is reported in the tool result, just not counted.
+
+The counters are cumulative across stages: a passing gate does not clear them, and neither does moving on. `reset` keeps them too — a rework already happened, and wiping the record would make the flow unable to say it was ever pushed back; only the rework budgets and the history start over. When the state file is corrupt, `reset` cannot read the old metrics and starts from zero. The maps are complete: `advanceBlocked` carries all six stage names and `rework` all six failure types, zero-filled, so a reader never has to distinguish "zero" from "missing"; `codes` starts empty and only grows.
+
+Read them with `action: "metrics"`:
+
+```json
+{
+  "stage": "test",
+  "reworkStage": "test",
+  "metrics": {
+    "advanceBlocked": { "clarify": 0, "design": 1, "build": 0, "test": 2, "accept": 0, "ship": 0 },
+    "rework": { "DESIGN_UNFEASIBLE": 0, "CONTRACT_GAP": 0, "CONTRACT_CONFLICT": 0, "IMPL_MISMATCH": 1, "TEST_FAIL": 1, "ACCEPT_P0": 0 },
+    "codes": { "CONTRACT_UNDESIGNED": 1, "FP_UNCOVERED": 2, "REWORK_BUDGET_EXHAUSTED": 1 }
+  }
+}
+```
 
 ### State schema (version 2)
 
@@ -45,11 +74,16 @@ Stages: `clarify → design → build → test → accept → ship`. The file li
   "stage": "test",
   "reworkStage": "test",
   "rework": { "DESIGN_UNFEASIBLE": 0, "CONTRACT_GAP": 0, "CONTRACT_CONFLICT": 0, "IMPL_MISMATCH": 1, "TEST_FAIL": 0, "ACCEPT_P0": 0 },
+  "metrics": {
+    "advanceBlocked": { "clarify": 0, "design": 0, "build": 0, "test": 1, "accept": 0, "ship": 0 },
+    "rework": { "DESIGN_UNFEASIBLE": 0, "CONTRACT_GAP": 0, "CONTRACT_CONFLICT": 0, "IMPL_MISMATCH": 1, "TEST_FAIL": 0, "ACCEPT_P0": 0 },
+    "codes": { "FP_UNCOVERED": 1 }
+  },
   "history": [{ "at": "2026-11-04T09:00:00.000Z", "action": "rework", "stage": "test", "failure": "IMPL_MISMATCH", "note": "用例 3 失败" }]
 }
 ```
 
-A `version:1` file (no `reworkStage`) stays readable: its counters are attributed to the current stage, and the first write upgrades the file to version 2. A file that is not valid JSON, not an object, or carries an unknown stage is an error whose message names the absolute path and says how to repair it (edit / delete / `reset`).
+A `version:1` file (no `reworkStage`) stays readable: its counters are attributed to the current stage, and the first write upgrades the file to version 2. A version 2 file written before `metrics` existed stays readable too: `metrics` is filled with the zero-valued structure above, and the schema version stays 2 — the field is additive, not a migration. A file that is not valid JSON, not an object, or carries an unknown stage is an error whose message names the absolute path and says how to repair it (edit / delete / `reset`).
 
 State writes are serialised through an exclusive lock file (`.dsh/devflow/state.lock`); a lock held by another writer makes the call fail after about half a second instead of interleaving, and a lock older than ten seconds is treated as abandoned.
 

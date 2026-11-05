@@ -1,0 +1,69 @@
+{
+  "version": 2,
+  "stage": "ship",
+  "reworkStage": "ship",
+  "rework": {
+    "DESIGN_UNFEASIBLE": 0,
+    "CONTRACT_GAP": 0,
+    "CONTRACT_CONFLICT": 0,
+    "IMPL_MISMATCH": 0,
+    "TEST_FAIL": 0,
+    "ACCEPT_P0": 0
+  },
+  "metrics": {
+    "advanceBlocked": {
+      "clarify": 0,
+      "design": 0,
+      "build": 0,
+      "test": 0,
+      "accept": 0,
+      "ship": 0
+    },
+    "rework": {
+      "DESIGN_UNFEASIBLE": 0,
+      "CONTRACT_GAP": 0,
+      "CONTRACT_CONFLICT": 0,
+      "IMPL_MISMATCH": 0,
+      "TEST_FAIL": 0,
+      "ACCEPT_P0": 0
+    },
+    "codes": {}
+  },
+  "history": [
+    {
+      "at": "2026-11-05T02:56:47.779Z",
+      "action": "advance",
+      "stage": "clarify",
+      "to": "design",
+      "note": "002 收口"
+    },
+    {
+      "at": "2026-11-05T02:56:47.785Z",
+      "action": "advance",
+      "stage": "design",
+      "to": "build",
+      "note": "002 收口"
+    },
+    {
+      "at": "2026-11-05T02:56:47.786Z",
+      "action": "advance",
+      "stage": "build",
+      "to": "test",
+      "note": "002 收口"
+    },
+    {
+      "at": "2026-11-05T02:56:47.789Z",
+      "action": "advance",
+      "stage": "test",
+      "to": "accept",
+      "note": "002 收口"
+    },
+    {
+      "at": "2026-11-05T02:56:47.794Z",
+      "action": "advance",
+      "stage": "accept",
+      "to": "ship",
+      "note": "002 收口"
+    }
+  ]
+}

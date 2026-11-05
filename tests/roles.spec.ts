@@ -131,6 +131,35 @@ describe('roleMatches', () => {
     expect(roleMatches(find('frontend-vue'), new Set(['package.json', 'vite.config.ts']))).toBe(true)
   })
 
+  it('matches any extension when the marker ends in .*', () => {
+    // FP-01: the manifest says `vite.config.*`, so the extension is not fixed.
+    expect(roleMatches(find('frontend-vue'), new Set(['package.json', 'vite.config.js']))).toBe(true)
+    expect(roleMatches(find('frontend-vue'), new Set(['package.json', 'vite.config.mts']))).toBe(true)
+    expect(roleMatches(find('frontend-vue'), new Set(['package.json', 'vite.config.ts']))).toBe(true)
+    expect(roleMatches(find('frontend-vue'), new Set(['vite.config.js']))).toBe(false)
+  })
+
+  it('requires the wildcard stem to match in full, so a longer name cannot pose as it', () => {
+    expect(roleMatches(find('frontend-vue'), new Set(['package.json', 'vitest.config.ts']))).toBe(false)
+  })
+
+  it('keeps ordinary dotted file names exact rather than treating them as wildcards', () => {
+    const node = role({ detect: ['package.json'] })
+    expect(roleMatches(node, new Set(['package.json']))).toBe(true)
+    expect(roleMatches(node, new Set(['package.yaml']))).toBe(false)
+    expect(roleMatches(node, new Set(['package.json.bak']))).toBe(false)
+    const plugin = role({ detect: [['cordis.patch.yml', 'tsdown.config.ts']] })
+    expect(roleMatches(plugin, new Set(['cordis.patch.yml', 'tsdown.config.ts']))).toBe(true)
+    expect(roleMatches(plugin, new Set(['cordis.patch.yaml', 'tsdown.config.ts']))).toBe(false)
+  })
+
+  it('needs a non-empty extension after the wildcard dot', () => {
+    const wildcard = role({ detect: ['vite.config.*'] })
+    expect(roleMatches(wildcard, new Set(['vite.config']))).toBe(false)
+    expect(roleMatches(wildcard, new Set(['vite.config.']))).toBe(false)
+    expect(roleMatches(wildcard, new Set(['vite.config.js']))).toBe(true)
+  })
+
   it('mounts core roles even when the repository has no markers', () => {
     for (const id of ['pm', 'backend-design', 'qa', 'ops']) {
       expect(roleMatches(find(id), new Set())).toBe(true)
@@ -151,7 +180,7 @@ describe('roleMatches', () => {
 
   it('ships the manifests with the corrected detect groups', () => {
     expect(find('backend-java').detect).toEqual(['pom.xml', 'build.gradle', 'build.gradle.kts'])
-    expect(find('frontend-vue').detect).toEqual([['package.json', 'vite.config.ts']])
+    expect(find('frontend-vue').detect).toEqual([['package.json', 'vite.config.*']])
     expect(find('dsh-plugin-dev').detect).toEqual([['cordis.patch.yml', 'tsdown.config.ts']])
     expect(find('mobile-flutter').detect).toEqual(['pubspec.yaml'])
   })

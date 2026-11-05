@@ -34,7 +34,7 @@ docs/dev/<NNN>/   需求产物
 
 **分层铁律**：`gates/` 不读配置外的项目事实；`tools.ts` 只做 wire，不做判定；`index.ts` 只装配，不含业务规则；`roles/` 是数据，代码里不写死角色。
 
-**detect 语义**：`roles/*.role.yml` 的 `detect` 是**组列表**——组内 AND、组间 OR，单个字符串即单元素组（如 `backend-java` 的 `pom.xml`/`build.gradle`/`build.gradle.kts` 是三选一，`frontend-vue` 的 `[package.json, vite.config.ts]` 要求同时存在）。core 恒装。判定由 `src/roles.ts` 的 `roleMatches(role, markers)` 执行，`role-init` 的表格与此同一语义。
+**detect 语义**：`roles/*.role.yml` 的 `detect` 是**组列表**——组内 AND、组间 OR，单个字符串即单元素组（如 `backend-java` 的 `pom.xml`/`build.gradle`/`build.gradle.kts` 是三选一，`frontend-vue` 的 `[package.json, vite.config.*]` 要求同时存在）。标记以 `.*` 结尾是后缀通配，`.*` 表示同名任意扩展名（非空后缀，前缀须完整匹配：`vite.config.*` 命中 `vite.config.js`，不命中 `vitest.config.ts`）；其它写法精确匹配，`package.json` 这类带点文件名不是通配。core 恒装。判定由 `src/roles.ts` 的 `roleMatches(role, markers)` 执行，`role-init` 的表格与此同一语义。
 
 ## 3. 命名与代码惯例
 

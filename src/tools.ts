@@ -21,6 +21,7 @@ import {
   reset,
   rework,
   type FailureType,
+  type Metrics,
   type StateOutcome,
 } from './state'
 
@@ -56,6 +57,14 @@ const FINDING_SCHEMA = {
   },
 } as const
 
+/** One counter map in `devflow_state`'s output: key counted, occurrence count. */
+const COUNTER_MAP_SCHEMA = {
+  type: 'object',
+  required: true,
+  additionalProperties: true,
+  description: 'Counter map: the key names what was counted (a stage, a failure type, or a finding code); the value is how often it happened.',
+} as const
+
 /** Gate names accepted by `devflow_gate`. */
 const GATE_NAMES = ['clarify', 'design', 'test', 'accept', 'review'] as const
 
@@ -78,9 +87,10 @@ const STAGE_DOC = [
 const ACTION_DOC = [
   'What to do with the state. Each value names what it changes and what it returns.',
   'read — reports the current stage and the rework counters already spent in this stage; never moves the flow. A corrupt state file is an error, not a silent reset.',
+  'metrics — reads the cumulative statistics without moving the flow: `advanceBlocked` (refused advances per stage), `rework` (reworks per failure type), and `codes` (error-level finding codes seen in refused advances; warnings are excluded as constant noise). A refusal is counted at the moment it happens, and a `reset` keeps the counters.',
   'advance — re-runs the current stage’s gate and moves to the next stage only when it passes; on failure the stage is unchanged and the gate’s findings come back with `pass: false`. When this stage’s rework budget is exhausted, `advance` is refused even if the gate passes (`REWORK_BUDGET_EXHAUSTED`): report to the user, or `reset` and redo the stage.',
   'rework — records one rework against the `failure` type and reports `count`, `budget`, and `exhausted`; counters are per stage and are cleared when the flow enters a new stage. Once exhausted the flow must escalate to the user instead of retrying. Requires `failure`.',
-  'reset — returns the flow to `clarify` and clears every rework counter plus the transition history; for a replaced requirement, not a way past a failing gate.',
+  'reset — returns the flow to `clarify` and clears every rework counter plus the transition history, keeping the cumulative metrics; for a replaced requirement, not a way past a failing gate.',
 ].join('\n')
 
 /** Per-value criteria for `devflow_state`'s `failure` parameter. */
@@ -134,6 +144,24 @@ function renderGate(stage: string, pass: boolean, findings: WireFinding[]): stri
   const lines = findings.slice(0, 20).map((item) => `- [${item.code}] ${item.detail}`)
   const more = findings.length > 20 ? `\n…and ${findings.length - 20} more` : ''
   return `${head}\n${lines.join('\n')}${more}`
+}
+
+/** Render one counter map as `key=count, …`, or `none yet` when it is empty. */
+function renderCounters(counters: Record<string, number>): string {
+  const counted = Object.entries(counters)
+    .filter(([, count]) => count > 0)
+    .map(([key, count]) => `${key}=${count}`)
+  return counted.length === 0 ? 'none yet' : counted.join(', ')
+}
+
+/** Render the cumulative statistics as one text block. */
+function renderMetrics(metrics: Metrics, stage: string, reworkStage: string): string {
+  return [
+    `metrics — stage ${stage}, rework counters belong to ${reworkStage}`,
+    `advance blocked by stage: ${renderCounters(metrics.advanceBlocked)}`,
+    `rework by failure type: ${renderCounters(metrics.rework)}`,
+    `finding codes: ${renderCounters(metrics.codes)}`,
+  ].join('\n')
 }
 
 /**
@@ -194,7 +222,7 @@ export function flowTools() {
       action: {
         type: 'string',
         required: true,
-        enum: ['read', 'advance', 'rework', 'reset'],
+        enum: ['read', 'metrics', 'advance', 'rework', 'reset'],
         description: ACTION_DOC,
       },
       root: {
@@ -233,6 +261,26 @@ export function flowTools() {
               exhausted: { type: 'boolean', required: true },
             },
           },
+          reworkStage: { type: 'string', description: 'Stage the per-stage rework counters belong to, for `metrics`.' },
+          metrics: {
+            type: 'object',
+            additionalProperties: false,
+            description: 'Cumulative counters, present on `metrics`; a refused advance and every rework are counted as they happen.',
+            properties: {
+              advanceBlocked: {
+                ...COUNTER_MAP_SCHEMA,
+                description: 'Refused `advance` calls, counted per stage the flow was in.',
+              },
+              rework: {
+                ...COUNTER_MAP_SCHEMA,
+                description: 'Recorded reworks, counted per failure type (the same keys as the `failure` parameter).',
+              },
+              codes: {
+                ...COUNTER_MAP_SCHEMA,
+                description: 'Error-level finding codes returned by a refused `advance`, with how often each was produced; warnings such as `UI_ACCEPTANCE_WAIVED` are not counted.',
+              },
+            },
+          },
         },
       },
       render: (_args: unknown, value: WireOutcome) => [
@@ -243,7 +291,7 @@ export function flowTools() {
       ],
     },
     execute(args: {
-      action: 'read' | 'advance' | 'rework' | 'reset'
+      action: 'read' | 'metrics' | 'advance' | 'rework' | 'reset'
       root: string
       failure?: FailureType
       note?: string
@@ -273,6 +321,22 @@ export function flowTools() {
             pass: true,
             message: parts.join('; '),
             findings: [],
+          })
+        }
+        case 'metrics': {
+          const { state: current } = readState(args.root)
+          return Promise.resolve({
+            stage: current.stage,
+            advanced: false,
+            pass: true,
+            message: renderMetrics(current.metrics, current.stage, current.reworkStage),
+            findings: [],
+            reworkStage: current.reworkStage,
+            metrics: {
+              advanceBlocked: { ...current.metrics.advanceBlocked },
+              rework: { ...current.metrics.rework },
+              codes: { ...current.metrics.codes },
+            },
           })
         }
         case 'advance':

@@ -1,0 +1,7 @@
+{
+  "ui": {
+    "applicable": false,
+    "reason": "本仓是 DSH bundle（Host-only 插件），无界面、无设计稿；002 只改通配判定与计数落盘，界面不可观测也无需观测。"
+  },
+  "reviewMinVerdicts": 10
+}
