@@ -22,6 +22,7 @@
 | 依赖方向 | 本仓不依赖任何业务仓；下游业务仓通过 bundle 引用本仓技能与工具 |
 | 需求目录 | `docs/dev/<NNN-slug>/`；当前 `001-flow-hardening/` |
 | 项目规范 | `docs/dev/project-standard.md` |
+| 网络 | `github.com` 直连不通，git 走本机代理 `127.0.0.1:7897`（已写入仓库级 `http.proxy`）；离开该网络需清掉这两个配置 |
 | 质量基线 | `pnpm check` + 真包集成（缺 pack 则 skip 并报告）+ 宿主插件规范 12 条 |
 
 ## 角色职责边界
