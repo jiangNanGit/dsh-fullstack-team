@@ -27,6 +27,24 @@ packs:
     dir: ~/.dsh/skill-packs/team-core
 ```
 
+## Two ways to install
+
+Either works without any registry account:
+
+```bash
+# 1. from GitHub (no npm account needed)
+npm i -g github:jiangNanGit/dsh-fullstack-team
+dsh-fullstack-team install
+
+# 2. from npm, once published
+npx dsh-fullstack-team install
+```
+
+`install` does everything: detects the host version, aligns the preset template with the shipped
+`standard` preset, generates the eight role presets, backs up and merges your profile, re-reads and
+verifies it, restarts the host. Running it twice prints `已是最新，无需操作` and touches nothing.
+`--no-restart` and `--dry-run` exist for debugging; `--force` skips the compatibility gate (not advised).
+
 ## Getting `team-core`
 
 `team-core` is a directory of skills, one subdirectory per skill, each with a `SKILL.md`. It is distributed separately from this bundle — it is not vendored here and it is not published on npm as part of this package — because capability is reusable while project facts are not.

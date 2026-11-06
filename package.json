@@ -71,7 +71,8 @@
     "prepack": "pnpm build",
     "audit:skills": "node scripts/skill-audit.mjs skills",
     "dsh:install": "node scripts/install.mjs",
-    "presets:install": "node scripts/install-presets.mjs"
+    "presets:install": "node scripts/install-presets.mjs",
+    "prepare": "tsdown"
   },
   "dependencies": {
     "yaml": "^2.8.1"
