@@ -72,7 +72,7 @@
     "audit:skills": "node scripts/skill-audit.mjs skills",
     "dsh:install": "node scripts/install.mjs",
     "presets:install": "node scripts/install-presets.mjs",
-    "prepare": "tsdown"
+    "prepare": "node scripts/prepare-build.mjs"
   },
   "dependencies": {
     "yaml": "^2.8.1"
