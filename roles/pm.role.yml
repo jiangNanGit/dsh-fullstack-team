@@ -17,6 +17,11 @@ delegates: true
 contract:
   input: 需求原文 + 仓库现状 + 上一轮产物
   output: 冻结档、任务书、裁决结论、验收结论；使用者视角优先——安装/升级/自检必须收敛成一条命令或零命令，不得让使用者跑设备授权、手动重启宿主、读日志自行判断；任何必须由人做的步骤要在验收报告里单列并说明为何不能自动化
+# 主 PM 自己装插件：宿主 shipped standard 里 manager 只在 profile 内启用、
+# market 始终关闭，这里按角色层面把两行都打开（只影响 preset-pm）。
+plugins:
+  tool-plugin-manager: enabled
+  tool-plugin-market: enabled
 packs:
   - name: team-core
     dir: ~/.dsh/skill-packs/team-core

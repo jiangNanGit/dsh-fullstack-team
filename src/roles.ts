@@ -15,6 +15,15 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 
+/**
+ * Whether a preset turns one plugin row on or off.
+ *
+ * `enabled` writes `disabled: false` into that row, `disabled` writes
+ * `disabled: true`. Nothing else is accepted: a typo must fail the build
+ * rather than silently leave the template's value in place.
+ */
+export type PluginSetting = 'enabled' | 'disabled'
+
 /** A skill pack a role depends on. */
 export interface RolePack {
   /** Pack name, used in diagnostics. */
@@ -53,6 +62,15 @@ export interface RoleManifest {
   packs?: RolePack[]
   /** Whether this role may dispatch other roles. */
   delegates?: boolean
+  /**
+   * Plugin rows this role flips in its own preset, keyed by the row id the
+   * template uses (`tool-plugin-manager`). The template stays a verbatim copy
+   * of the upstream standard preset, so a tool the host ships disabled is
+   * enabled here, per role, at generation time. A row a role does not name
+   * keeps the template's value, which is why a role that declares nothing
+   * renders exactly as it did before this field existed.
+   */
+  plugins?: Record<string, PluginSetting>
   /** What this role takes in and hands back — the thin-agent contract. */
   contract?: { input: string; output: string }
 }
@@ -106,11 +124,28 @@ export function loadRoles(dir: string): RoleManifest[] {
           '(they are the shared core; see docs/002-role-presets.md). Remove the key and narrow with "include" instead.',
       )
     }
+    // `plugins` flips individual rows of this role's own preset. Validate the
+    // shape here, with the manifest path in hand, so a typo fails at load time
+    // like every other manifest error rather than at render time.
+    if (role.plugins !== undefined) {
+      if (role.plugins === null || typeof role.plugins !== 'object' || Array.isArray(role.plugins)) {
+        throw new Error(`dsh-fullstack-team: role "${role.id}" has a plugins field that is not a mapping`)
+      }
+      for (const [row, setting] of Object.entries(role.plugins)) {
+        if (setting !== 'enabled' && setting !== 'disabled') {
+          throw new Error(
+            `dsh-fullstack-team: role "${role.id}" sets plugins.${row} to ${JSON.stringify(setting)} — ` +
+              'only "enabled" and "disabled" are allowed (see docs/002-role-presets.md)',
+          )
+        }
+      }
+    }
     roles.push({
       ...role,
       kind: role.kind === 'stack' ? 'stack' : 'core',
       include: [...role.include],
       ...(role.packs === undefined ? {} : { packs: [...role.packs] }),
+      ...(role.plugins === undefined ? {} : { plugins: { ...role.plugins } }),
     })
   }
   return roles.sort((left, right) => {
@@ -330,12 +365,120 @@ export function renderRoleEntry(role: RoleManifest): string {
   return lines.join('\n')
 }
 
+/** A list item that opens a plugin row: `- id: tool-plugin-manager`. */
+const ROW_START = /^(\s*)-\s+id:\s*(\S+)\s*$/u
+/** The `disabled:` key of a plugin row. */
+const DISABLED_LINE = /^(\s*)disabled:.*$/u
+
+/**
+ * Turn plugin rows on or off inside one rendered preset.
+ *
+ * The preset template is a verbatim copy of the upstream standard preset, so
+ * the only place a role may deviate is after rendering: this function rewrites
+ * the `disabled:` line of the named rows in **this** block and leaves every
+ * other line byte-for-byte alone. That is what keeps `tools/preset compatibility`
+ * true — the template still equals upstream, while the generated preset can
+ * differ per role.
+ *
+ * The row is located as a list item `- id: <row>` and runs until the next line
+ * at the same or a shallower indentation; blank lines belong to no row. Inside
+ * that span, an existing `disabled:` line is replaced whole — including a
+ * `!!js` expression, which must not survive half-written — and when the row
+ * has none, one is inserted at the end of the span with the row's own key
+ * indentation (two spaces deeper than the `- `).
+ *
+ * Unknown row ids and unknown settings are errors, never silent no-ops: a
+ * per-role tool switch that quietly does nothing is worse than a broken build.
+ *
+ * @param block - One rendered preset block (the text of a single `- insert:`).
+ * @param overrides - Row id → setting. An empty mapping returns `block` as is.
+ * @returns The block with only the named rows' `disabled:` lines changed.
+ * @throws When a setting is not `enabled`/`disabled` or a row id is absent.
+ */
+export function applyPluginOverrides(
+  block: string,
+  overrides: Readonly<Record<string, PluginSetting>>,
+): string {
+  const entries = Object.entries(overrides)
+  if (entries.length === 0) return block
+
+  for (const [row, setting] of entries) {
+    if (setting !== 'enabled' && setting !== 'disabled') {
+      throw new Error(
+        `dsh-fullstack-team: plugin row "${row}" has unknown setting ${JSON.stringify(setting)} — ` +
+          'use "enabled" or "disabled"',
+      )
+    }
+  }
+
+  const lines = block.split('\n')
+  const starts: { row: string; index: number; indent: number }[] = []
+  lines.forEach((line, index) => {
+    const match = ROW_START.exec(line)
+    if (match !== null) starts.push({ row: match[2] ?? '', index, indent: (match[1] ?? '').length })
+  })
+
+  const known = new Set(starts.map((start) => start.row))
+  for (const [row] of entries) {
+    if (!known.has(row)) {
+      throw new Error(
+        `dsh-fullstack-team: plugin row "${row}" is not in this preset template ` +
+          `(rows: ${[...known].join(', ')})`,
+      )
+    }
+  }
+
+  const edits = entries
+    .map(([row, setting]) => {
+      const start = starts.find((candidate) => candidate.row === row)
+      if (start === undefined) throw new Error(`dsh-fullstack-team: plugin row "${row}" is not in this preset template`)
+      // The row ends at the next line that dedents to its own level or above;
+      // blank lines do not end it, so a trailing blank line stays outside the
+      // span when we insert.
+      let end = lines.length
+      for (let index = start.index + 1; index < lines.length; index += 1) {
+        const line = lines[index] ?? ''
+        if (line.trim() === '') continue
+        if ((line.length - line.trimStart().length) <= start.indent) {
+          end = index
+          break
+        }
+      }
+      return { row, setting, start: start.index, end, indent: start.indent }
+    })
+    // Bottom-up: an insertion never shifts a row this pass still has to visit.
+    .sort((left, right) => right.start - left.start)
+
+  const next = [...lines]
+  for (const edit of edits) {
+    const value = edit.setting === 'enabled' ? 'false' : 'true'
+    let replaced = false
+    for (let index = edit.start + 1; index < edit.end; index += 1) {
+      const match = DISABLED_LINE.exec(next[index] ?? '')
+      if (match === null) continue
+      const indent = match[1] ?? ''
+      if (indent.length <= edit.indent) continue
+      next[index] = `${indent}disabled: ${value}`
+      replaced = true
+      break
+    }
+    if (replaced) continue
+    let at = edit.end
+    while (at > edit.start + 1 && (next[at - 1] ?? '').trim() === '') at -= 1
+    next.splice(at, 0, `${' '.repeat(edit.indent + 2)}disabled: ${value}`)
+  }
+
+  return next.join('\n')
+}
+
 /**
  * Render the whole preset patch for a plan.
  *
- * The template is the upstream standard preset with four tokens for the role's
+ * The template is the upstream standard preset with six tokens for the role's
  * identity; everything else stays upstream's, so a role never drifts further
- * than the template does.
+ * than the template does. A role that declares `plugins` flips those rows in its
+ * own copy only (see {@link applyPluginOverrides}); the template is untouched,
+ * which is what the compatibility gate compares against the host.
  *
  * @param template - Preset template containing `{{PRESET_ID}}`, `{{ROLE_ID}}`,
  *   `{{ROLE_NAME}}`, `{{ROLE_DESCRIPTION}}` and `{{ROLE_ENTRY}}`.
@@ -380,6 +523,9 @@ export function renderRolesPatch(template: string, plan: RolePlan): string {
       if (!block.includes(anchor)) throw new Error('dsh-fullstack-team: template has no tool-subagent block to extend')
       block = block.replace(anchor, `${anchor}\n${allow}`)
     }
+    // The template is upstream's; a role's tool switches are this role's only.
+    // Applying them last means the token and allowlist edits above are done.
+    if (role.plugins !== undefined) block = applyPluginOverrides(block, role.plugins)
     blocks.push(block.trimEnd())
   })
   // New sessions start as the main agent: the team is one thing the user talks

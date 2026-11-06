@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  applyPluginOverrides,
   checkRoleIncludes,
   loadRoles,
   planRoles,
@@ -351,5 +352,257 @@ describe('renderRolesPatch', () => {
 
   it('refuses a template missing a token', () => {
     expect(() => renderRolesPatch('nothing here', { enabled: [], blocked: [] })).toThrow(/missing \{\{PRESET_ID\}\}/u)
+  })
+})
+
+describe('applyPluginOverrides', () => {
+  /** A preset block shaped like the generated ones: plugin rows at ten spaces. */
+  const block = [
+    '- insert:',
+    '    - id: preset-pm',
+    '      config:',
+    '        plugins:',
+    "          - id: tool-bash",
+    "            name: '@deepseek-ai/dsh-tool-bash'",
+    "            disabled: !!js process.platform === 'win32'",
+    "          - id: tool-plugin-manager",
+    "            name: '@deepseek-ai/dsh-plugin-manager/tools'",
+    '            disabled: !!js "!ctx.get(\'profileContext\')"',
+    "          - id: tool-plugin-market",
+    "            name: '@deepseek-ai/dsh-plugin-market/tools'",
+    '            disabled: true',
+    '          - id: dsh-fullstack-team',
+    '            name: dsh-fullstack-team',
+  ].join('\n')
+
+  /** Lines that differ between two texts, paired by position (same length assumed). */
+  const changed = (before: string, after: string): string[] => {
+    const left = before.split('\n')
+    const right = after.split('\n')
+    expect(right).toHaveLength(left.length)
+    return right.filter((line, index) => line !== left[index])
+  }
+
+  it('flips only the named rows and leaves every other line byte-identical', () => {
+    const patched = applyPluginOverrides(block, { 'tool-plugin-manager': 'enabled', 'tool-plugin-market': 'enabled' })
+    expect(changed(block, patched)).toEqual(['            disabled: false', '            disabled: false'])
+    expect(patched).toContain("disabled: !!js process.platform === 'win32'")
+  })
+
+  it('replaces an existing `disabled: true` with false', () => {
+    const patched = applyPluginOverrides(block, { 'tool-plugin-market': 'enabled' })
+    expect(patched).toContain("            name: '@deepseek-ai/dsh-plugin-market/tools'\n            disabled: false")
+  })
+
+  it('replaces a whole `!!js` expression, leaving no half-written line', () => {
+    const patched = applyPluginOverrides(block, { 'tool-plugin-manager': 'enabled' })
+    expect(patched).toContain("            name: '@deepseek-ai/dsh-plugin-manager/tools'\n            disabled: false")
+    expect(patched).not.toContain('ctx.get')
+  })
+
+  it('can switch a row back off: `disabled` writes true', () => {
+    const patched = applyPluginOverrides(block, { 'tool-plugin-manager': 'disabled' })
+    expect(patched).toContain("            name: '@deepseek-ai/dsh-plugin-manager/tools'\n            disabled: true")
+  })
+
+  it('inserts a `disabled:` line at the row’s key indentation when the row has none', () => {
+    const withoutDisabled = [
+      '        plugins:',
+      "          - id: tool-schedule",
+      "            name: '@deepseek-ai/dsh-tool-schedule'",
+      "          - id: tool-ask-user",
+      "            name: '@deepseek-ai/dsh-tool-ask-user'",
+    ].join('\n')
+    const patched = applyPluginOverrides(withoutDisabled, { 'tool-schedule': 'enabled' })
+    expect(patched.split('\n')).toEqual([
+      '        plugins:',
+      "          - id: tool-schedule",
+      "            name: '@deepseek-ai/dsh-tool-schedule'",
+      '            disabled: false',
+      "          - id: tool-ask-user",
+      "            name: '@deepseek-ai/dsh-tool-ask-user'",
+    ])
+  })
+
+  it('inserts before the next row, not inside a nested group that follows', () => {
+    const nested = [
+      '        plugins:',
+      '          - id: tool-a',
+      "            name: '@a'",
+      '          - id: group',
+      '            group: true',
+      '            config:',
+      '              - id: inner',
+      "                name: '@inner'",
+      '          - id: tool-b',
+      "            name: '@b'",
+    ].join('\n')
+    const patched = applyPluginOverrides(nested, { 'tool-a': 'disabled' })
+    expect(patched.split('\n')).toEqual([
+      '        plugins:',
+      '          - id: tool-a',
+      "            name: '@a'",
+      '            disabled: true',
+      '          - id: group',
+      '            group: true',
+      '            config:',
+      '              - id: inner',
+      "                name: '@inner'",
+      '          - id: tool-b',
+      "            name: '@b'",
+    ])
+  })
+
+  it('appends the inserted line at the end of the block when the row is last', () => {
+    const tail = ['          - id: tool-z', "            name: '@z'"].join('\n')
+    expect(applyPluginOverrides(tail, { 'tool-z': 'enabled' })).toBe(
+      ["          - id: tool-z", "            name: '@z'", '            disabled: false'].join('\n'),
+    )
+  })
+
+  it('returns the block untouched when nothing is overridden', () => {
+    expect(applyPluginOverrides(block, {})).toBe(block)
+  })
+
+  it('refuses an unknown row id instead of ignoring it', () => {
+    expect(() => applyPluginOverrides(block, { 'tool-plugin-nope': 'enabled' })).toThrow(/not in this preset template/u)
+  })
+
+  it('refuses an unknown setting instead of guessing', () => {
+    expect(() =>
+      applyPluginOverrides(block, { 'tool-plugin-manager': 'on' as unknown as 'enabled' }),
+    ).toThrow(/unknown setting/u)
+  })
+})
+
+describe('role-level plugin switches', () => {
+  const template = readFileSync(join(repository, 'templates', 'preset.template.yml'), 'utf8')
+
+  /** Split a generated patch into its per-preset blocks, keyed by preset id. */
+  const blocks = (patch: string): Map<string, string> => {
+    const map = new Map<string, string>()
+    for (const block of patch.split('- insert:').slice(1)) {
+      const match = /^    - id: (preset-\S+)$/mu.exec(block)
+      if (match !== null) map.set(match[1] ?? '', block)
+    }
+    return map
+  }
+
+  it('ships pm as the only role that opens the two plugin tools', () => {
+    const roles = loadRoles(join(repository, 'roles'))
+    const pm = roles.find((item) => item.id === 'pm')
+    expect(pm?.plugins).toEqual({ 'tool-plugin-manager': 'enabled', 'tool-plugin-market': 'enabled' })
+    expect(roles.filter((item) => item.plugins !== undefined).map((item) => item.id)).toEqual(['pm'])
+  })
+
+  it('turns both rows on inside preset-pm and leaves the other seven presets alone', () => {
+    const roles = loadRoles(join(repository, 'roles'))
+    const patch = renderRolesPatch(template, planRoles(roles, () => true))
+    const presets = blocks(patch)
+    expect(presets.size).toBe(8)
+
+    const pm = presets.get('preset-pm') ?? ''
+    expect(pm).toContain("            name: '@deepseek-ai/dsh-plugin-manager/tools'\n            disabled: false")
+    expect(pm).toContain("            name: '@deepseek-ai/dsh-plugin-market/tools'\n            disabled: false")
+
+    for (const [id, block] of presets) {
+      if (id === 'preset-pm') continue
+      expect(block).toContain(
+        "            name: '@deepseek-ai/dsh-plugin-manager/tools'\n            disabled: !!js \"!ctx.get('profileContext')\"",
+      )
+      expect(block).toContain("            name: '@deepseek-ai/dsh-plugin-market/tools'\n            disabled: true")
+    }
+  })
+
+  it('renders a role without plugins exactly as before the field existed', () => {
+    const fixture = [
+      '- insert:',
+      '    - id: {{PRESET_ID}}',
+      "      name: '@deepseek-ai/dsh-agent-preset'",
+      '      config:',
+      '        id: {{ROLE_ID}}',
+      '        name: {{ROLE_NAME}}',
+      '        description: {{ROLE_DESCRIPTION}}',
+      '        plugins:',
+      '          - id: persona',
+      "            name: '@deepseek-ai/dsh-persona'",
+      '            config:',
+      '              prefix: {{ROLE_PREFIX}}',
+      '          - id: tool-plugin-manager',
+      "            name: '@deepseek-ai/dsh-plugin-manager/tools'",
+      '            disabled: !!js "!ctx.get(\'profileContext\')"',
+      '          - id: tool-plugin-market',
+      "            name: '@deepseek-ai/dsh-plugin-market/tools'",
+      '            disabled: true',
+      '{{ROLE_ENTRY}}',
+    ].join('\n')
+    const fixed = role({ id: 'qa', name: '测试', description: '验证用固定角色', kind: 'core', include: ['dev-orchestrator'] })
+    const expected = [
+      '- insert:',
+      '    - id: preset-qa',
+      "      name: '@deepseek-ai/dsh-agent-preset'",
+      '      config:',
+      '        id: qa',
+      '        name: 测试',
+      '        description: 验证用固定角色',
+      '        plugins:',
+      '          - id: persona',
+      "            name: '@deepseek-ai/dsh-persona'",
+      '            config:',
+      '              prefix: "You are a coding agent powered by the {{model}} model."',
+      '          - id: tool-plugin-manager',
+      "            name: '@deepseek-ai/dsh-plugin-manager/tools'",
+      '            disabled: !!js "!ctx.get(\'profileContext\')"',
+      '          - id: tool-plugin-market',
+      "            name: '@deepseek-ai/dsh-plugin-market/tools'",
+      '            disabled: true',
+      '          - id: dsh-fullstack-team',
+      '            name: dsh-fullstack-team',
+      '            config:',
+      '              providerName: dsh-fullstack-team',
+      '              include:',
+      '                - dev-orchestrator',
+      '              tools: true',
+      '',
+    ].join('\n')
+    expect(renderRolesPatch(fixture, planRoles([fixed], () => true))).toBe(expected)
+  })
+
+  it('keeps the override inside the declaring role’s own preset', () => {
+    const fixture = [
+      '- insert:',
+      '    - id: {{PRESET_ID}}',
+      '      config:',
+      '        id: {{ROLE_ID}}',
+      '        name: {{ROLE_NAME}}',
+      '        description: {{ROLE_DESCRIPTION}}',
+      '        plugins:',
+      '          - id: tool-plugin-market',
+      "            name: '@deepseek-ai/dsh-plugin-market/tools'",
+      '            disabled: true',
+      '{{ROLE_ENTRY}}',
+    ].join('\n')
+    const pm = role({ id: 'pm', kind: 'core', delegates: true, plugins: { 'tool-plugin-market': 'enabled' } })
+    const qa = role({ id: 'qa', kind: 'core', name: '测试', description: '验证' })
+    const presets = blocks(renderRolesPatch(fixture, planRoles([pm, qa], () => true)))
+    expect(presets.get('preset-pm')).toContain('disabled: false')
+    expect(presets.get('preset-qa')).toContain('disabled: true')
+  })
+
+  it('fails at load time on a plugins value that is not enabled/disabled', () => {
+    const dir = scratch()
+    writeFileSync(
+      join(dir, 'bad.role.yml'),
+      'id: x\nname: X\ninclude: [role-init]\nplugins:\n  tool-plugin-manager: on\n',
+      'utf8',
+    )
+    expect(() => loadRoles(dir)).toThrow(/plugins\.tool-plugin-manager/u)
+    expect(() => loadRoles(dir)).toThrow(/only "enabled" and "disabled"/u)
+  })
+
+  it('fails at load time on a plugins field that is not a mapping', () => {
+    const dir = scratch()
+    writeFileSync(join(dir, 'bad.role.yml'), 'id: x\nname: X\ninclude: [role-init]\nplugins: [tool-plugin-manager]\n', 'utf8')
+    expect(() => loadRoles(dir)).toThrow(/not a mapping/u)
   })
 })
