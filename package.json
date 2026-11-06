@@ -45,7 +45,10 @@
     "templates",
     "scripts",
     "presets",
-    "docs",
+    "docs/*.md",
+    "docs/dev/project-standard.md",
+    "docs/dev/project-manifest.md",
+    "docs/dev/pm-guidance.md",
     "examples",
     "README.md",
     "LICENSE"
