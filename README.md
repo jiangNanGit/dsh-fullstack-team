@@ -32,9 +32,9 @@ packs:
 Either works without any registry account:
 
 ```bash
-# 1. from GitHub (no npm account needed)
-npm i -g github:jiangNanGit/dsh-fullstack-team
-dsh-fullstack-team install
+# 1. from GitHub (no registry account needed; verified)
+pnpm add github:jiangNanGit/dsh-fullstack-team
+node_modules/.bin/dsh-fullstack-team install
 
 # 2. from npm, once published
 npx dsh-fullstack-team install
